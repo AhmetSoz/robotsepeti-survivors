@@ -36,7 +36,7 @@ function makePlayer(charId) {
     // aktif yetenek + robot kol
     skill: { lvl: 1, cd: 4, wasReady: false },
     dashS: null, turboT: 0, turboHit: null, magnetBoostT: 0,
-    shieldT: 0, turboPickT: 0,
+    shieldT: 0, turboPickT: 0, afterT: 0, lean: 0, turnT: 0,
     armT: 1, armAnim: null,
     // hesaplanan statlar
     spd: 64, armor: 0, cdr: 0, might: 1, magnetR: 26, crit: 0.05,
@@ -89,6 +89,15 @@ function skillStats(p) {
   return s;
 }
 
+// Hızlı hareket sırasında geride kalan oyuncu silüetleri
+function emitAfterimage(p, dt) {
+  p.afterT -= dt;
+  if (p.afterT > 0) return;
+  p.afterT = 0.045;
+  Game.afterimgs.push({ charId: p.charId, x: p.x, y: p.y, flip: p.flip,
+    frame: ((p.animT * 9) | 0) % 2, t: 0 });
+}
+
 function updatePlayer(dt) {
   const p = Game.player;
 
@@ -120,6 +129,7 @@ function updatePlayer(dt) {
     }
     addPart({ x: p.x - ds.vx * 0.02, y: p.y - 8, vx: rand(-10, 10), vy: rand(-10, 10),
       dur: 0.25, type: 'puff', col: p.def.color, size: 3 });
+    emitAfterimage(p, dt);
     if (ds.t >= ds.dur) p.dashS = null;
     p.animT += dt;
     p.moving = true;
@@ -146,15 +156,19 @@ function updatePlayer(dt) {
     }
     addPart({ x: p.x + rand(-4, 4), y: p.y - rand(2, 12), vx: -(dx || 1) * 40, vy: 0,
       dur: 0.3, type: 'spark', col: pick([COL.teal, COL.white]) });
+    emitAfterimage(p, dt);
   }
   if (p.magnetBoostT > 0) p.magnetBoostT -= dt;
   if (p.shieldT > 0) p.shieldT -= dt;
   if (p.turboPickT > 0) {
     p.turboPickT -= dt;
     spdMul *= 1.6;
-    if (p.moving && Math.random() < 0.4) {
-      addPart({ x: p.x + rand(-3, 3), y: p.y - rand(2, 10), vx: -(dx || 1) * 30, vy: 0,
-        dur: 0.25, type: 'spark', col: COL.yellow });
+    if (p.moving) {
+      emitAfterimage(p, dt);
+      if (Math.random() < 0.4) {
+        addPart({ x: p.x + rand(-3, 3), y: p.y - rand(2, 10), vx: -(dx || 1) * 30, vy: 0,
+          dur: 0.25, type: 'spark', col: COL.yellow });
+      }
     }
   }
 
@@ -164,7 +178,11 @@ function updatePlayer(dt) {
     p.facing.x = dx || p.facing.x * (dy ? 0 : 1) || (dx === 0 && dy !== 0 ? 0 : p.facing.x);
     p.facing = { x: dx || (dy ? 0 : p.facing.x), y: dy };
     if (!dx && !dy) p.facing = { x: 1, y: 0 };
-    if (dx) p.flip = dx < 0;
+    if (dx) {
+      const nf = dx < 0;
+      if (nf !== p.flip) p.turnT = 0.12;   // yön değişti: dönüş animasyonu
+      p.flip = nf;
+    }
     p.animT += dt;
     // ayak tozu
     p.dustT -= dt;
@@ -176,6 +194,11 @@ function updatePlayer(dt) {
   }
   if (p.invuln > 0) p.invuln -= dt;
   if (p.hurtFlash > 0) p.hurtFlash -= dt;
+
+  // koşarken yöne eğilme + dönüş animasyonu sayacı
+  const targetLean = p.moving ? dx * 0.09 : 0;
+  p.lean += (targetLean - p.lean) * Math.min(1, 10 * dt);
+  if (p.turnT > 0) p.turnT -= dt;
 
   // Can'ın pasifi: periyodik soru sorup en yakını dondurur
   if (p.charId === 'can') {
@@ -276,14 +299,17 @@ function useSkill(p) {
       break;
     }
     case 'berker': {
-      // sevkiyat yağmuru: gökten koli
-      const targets = Game.enemies.filter(e => e.spawnT <= 0 && dist2(p.x, p.y, e.x, e.y) < 170 * 170);
-      for (let i = 0; i < Math.round(s.n); i++) {
-        let tx, ty;
-        const tgt = targets.length ? pick(targets) : null;
-        if (tgt) { tx = tgt.x + rand(-8, 8); ty = tgt.y + rand(-8, 8); }
-        else { const a = rand(TAU); tx = p.x + Math.cos(a) * rand(30, 120); ty = p.y + Math.sin(a) * rand(30, 120); }
-        Game.boxes.push({ x0: p.x, y0: p.y - 10, tx, ty, t: -i * 0.12, dur: 0.5,
+      // sevkiyat yağmuru: BAKTIĞIN yöne koli bombardımanı (oyuncu nişan alır)
+      let fx = p.facing.x, fy = p.facing.y;
+      if (!fx && !fy) fx = p.flip ? -1 : 1;
+      const base = Math.atan2(fy, fx);
+      const count = Math.round(s.n);
+      for (let i = 0; i < count; i++) {
+        // koni şeklinde ileri saçılım: yakından uzağa dizilir
+        const a = base + rand(-0.5, 0.5);
+        const r = 26 + (i / count) * 115 + rand(-10, 10);
+        const tx = p.x + Math.cos(a) * r, ty = p.y + Math.sin(a) * r;
+        Game.boxes.push({ x0: p.x, y0: p.y - 10, tx, ty, t: -i * 0.09, dur: 0.45,
           dmg: s.dmg, splash: s.splash, sky: true });
       }
       Sfx.play('box'); Sfx.play('akin');
@@ -592,6 +618,12 @@ function updateWeaponEntities(dt) {
       addPart({ x: c.x - c.dir * 14, y: c.y + rand(-2, 2), vx: -c.dir * 20, vy: rand(-14, -4),
         dur: 0.4, type: 'puff', col: COL.greyDark, size: 2 });
     }
+    // asfalta lastik izi bırakır
+    c.skidT = (c.skidT || 0) - dt;
+    if (c.skidT <= 0) {
+      c.skidT = 0.05;
+      Game.decals.push({ type: 'skid', x: c.x - c.dir * 10, y: c.y + 2, dir: c.dir, t: 0, dur: 2.2 });
+    }
     for (const e of Game.enemies) {
       if (c.hit.has(e.id)) continue;
       if (Math.abs(e.y - c.y) < c.band && Math.abs(e.x - c.x) < 17) {
@@ -738,7 +770,11 @@ function spawnEnemy(typeId, x, y) {
     windT: 0, dashT: 0, dvx: 0, dvy: 0,
     acCd: rand(1.5, 3.5),
     teleCd: t.tele ? t.tele.cd * 0.7 : 0,
-    sumCd: t.summon ? t.summon.cd * 0.7 : 0
+    sumCd: t.summon ? t.summon.cd * 0.7 : 0,
+    lobCd: t.lob ? t.lob.cd * 0.6 : 0,
+    rainCd: t.rain ? t.rain.cd * 0.6 : 0,
+    slamCd: t.slam ? t.slam.cd * 0.5 : 0,
+    slamWindT: 0, enraged: false
   };
   e.maxHp = e.hp;
   Game.enemies.push(e);
@@ -754,6 +790,7 @@ function damageEnemy(e, dmg, kx, ky, silent) {
   if (!silent && Math.random() < (p.crit || 0)) {
     crit = true;
     dmg *= 2;
+    addPart({ x: e.x, y: e.y - 10, dur: 0.22, type: 'crit', col: COL.yellow, size: 6 });
     for (let i = 0; i < 4; i++) {
       addPart({ x: e.x + rand(-4, 4), y: e.y - 10 + rand(-4, 4), vx: rand(-50, 50), vy: rand(-60, -10),
         dur: 0.35, type: 'spark', col: COL.yellow });
@@ -763,8 +800,16 @@ function damageEnemy(e, dmg, kx, ky, silent) {
   e.flash = 0.1;
   e.popT = 0.09;   // vuruş "pop"u: sprite anlık büyür
   if (kx || ky) {
-    const kbRes = e.type.boss ? 0.06 : (e.type.elite ? 0.25 : (e.type.breakable ? 0 : 1));
+    const kbRes = e.type.boss ? 0.06 : (e.type.elite ? 0.25 : (e.type.heavy ? 0.35 : (e.type.breakable ? 0 : 1)));
     e.kx += kx * kbRes; e.ky += ky * kbRes;
+  }
+  // boss öfke fazı: canı %60 altına düşünce
+  if (e.type.boss && !e.enraged && e.hp > 0 && e.hp < e.maxHp * 0.6) {
+    e.enraged = true;
+    Game.banner = { txt: e.type.name + ' ÖFKELENDİ!', t: 0 };
+    Game.flashT = 0.25; Game.flashCol = '228,59,68';
+    Game.shake = Math.max(Game.shake, 4);
+    Sfx.play('boss');
   }
   if (!silent) {
     const big = crit || dmg >= 30;
@@ -820,7 +865,8 @@ function killEnemy(e) {
 
   // ceset animasyonu (yere serilip kaybolur)
   if (Game.corpses.length > 40) Game.corpses.shift();
-  Game.corpses.push({ typeId: e.typeId, x: e.x, y: e.y, flip: e.flip, scale: e.type.scale, t: 0 });
+  Game.corpses.push({ typeId: e.typeId, x: e.x, y: e.y, flip: e.flip,
+    scale: e.type.big ? e.type.sprScale : e.type.scale, t: 0 });
 
   // kalabalık aile: veletlere bölünür
   if (e.type.split) {
@@ -839,13 +885,22 @@ function killEnemy(e) {
     Game.freeze = 0.12;
     Game.shake = Math.max(Game.shake, 4);
   } else if (e.type.boss) {
-    addPickup('chest', e.x, e.y);
     addPickup('heart', e.x - 18, e.y);
     addPickup('heart', e.x + 18, e.y);
     for (let i = 0; i < 6; i++) addPickup('coin', e.x + rand(-20, 20), e.y + rand(-14, 14));
     Game.bossAlive = false;
+    Game.bossChestT = 1.0;   // ölüm şovundan sonra ödül kolisi kendiliğinden açılır
     Game.freeze = 0.25;
     Game.shake = Math.max(Game.shake, 6);
+    // boss ölüm şovu: beyaz flaş + çifte şok halkası + kıvılcım yağmuru
+    Game.flashT = 0.35; Game.flashCol = '255,255,255';
+    Game.shocks.push({ x: e.x, y: e.y - 8, r: 90, t: 0, col: COL.gold });
+    Game.shocks.push({ x: e.x, y: e.y - 8, r: 55, t: -0.08, col: COL.white });
+    for (let i = 0; i < 26; i++) {
+      const a = (i / 26) * TAU;
+      addPart({ x: e.x, y: e.y - 10, vx: Math.cos(a) * rand(60, 140), vy: Math.sin(a) * rand(40, 90) - 30,
+        dur: 0.7, type: 'spark', col: pick([COL.gold, COL.yellow, COL.white]) });
+    }
   } else if (Math.random() < 0.09) {
     addPickup('coin', e.x, e.y);
   } else if (Math.random() < 0.015) {
@@ -856,6 +911,8 @@ function killEnemy(e) {
     addPart({ x: e.x, y: e.y - 6, vx: rand(-55, 55), vy: rand(-70, -5), dur: 0.45,
       type: 'puff', col: pick([e.type.shirt, COL.greyLight, COL.white]), size: 2 });
   }
+  // müşterinin ruhu göğe yükselir
+  addPart({ x: e.x, y: e.y - 8, vx: rand(-6, 6), vy: -30, dur: 0.75, type: 'ghost' });
 }
 
 function updateEnemies(dt) {
@@ -906,6 +963,21 @@ function updateEnemies(dt) {
         // atılış halinde: düz ileri
         e.dashT -= dt;
         e.x += e.dvx * dt; e.y += e.dvy * dt;
+      } else if (e.slamWindT > 0) {
+        // masa şoku telegrafı: durup güç topluyor, zemin titriyor
+        e.slamWindT -= dt;
+        if (Math.random() < 12 * dt) {
+          const a = rand(TAU);
+          addPart({ x: e.x + Math.cos(a) * 18, y: e.y + Math.sin(a) * 8, vx: 0, vy: -rand(15, 35),
+            dur: 0.3, type: 'spark', col: COL.orange });
+        }
+        if (e.slamWindT <= 0) {
+          const cfg = e.type.slam;
+          Game.eRings.push({ x: e.x, y: e.y - 4, r: 10, maxR: cfg.maxR, dmg: cfg.dmg * dmgMul, hitP: false });
+          Game.shocks.push({ x: e.x, y: e.y - 4, r: 30, t: 0, col: COL.orange });
+          Game.shake = Math.max(Game.shake, 5);
+          Sfx.play('bigslam');
+        }
       } else if (e.windT > 0) {
         // telegraf: durup güç topluyor
         e.windT -= dt;
@@ -931,7 +1003,12 @@ function updateEnemies(dt) {
           if (e.shotCd <= 0 && d < r.range + 20) {
             e.shotCd = r.cd;
             const a = Math.atan2(p.y - 8 - e.y, p.x - e.x);
-            Game.eShots.push({ x: e.x, y: e.y - 8, vx: Math.cos(a) * r.projSpd, vy: Math.sin(a) * r.projSpd, dmg: r.dmg * dmgMul, t: 0 });
+            const n = r.spread || 1;
+            for (let si = 0; si < n; si++) {
+              const sa = a + (si - (n - 1) / 2) * 0.28;
+              Game.eShots.push({ x: e.x, y: e.y - 8, vx: Math.cos(sa) * r.projSpd, vy: Math.sin(sa) * r.projSpd,
+                dmg: r.dmg * dmgMul, t: 0, spr: r.spr });
+            }
           }
         }
 
@@ -957,6 +1034,26 @@ function updateEnemies(dt) {
           e.sumCd -= dt;
           if (e.sumCd <= 0) { e.sumCd = e.type.summon.cd; bossSummon(e); }
         }
+        // toptancı: palet fırlatma (yer hedefli telegraf)
+        if (e.type.lob && d < 260) {
+          e.lobCd -= dt;
+          if (e.lobCd <= 0) { e.lobCd = e.type.lob.cd; bossLob(e); }
+        }
+        // karaborsacı: para yağmuru
+        if (e.type.rain && d < 280) {
+          e.rainCd -= dt;
+          if (e.rainCd <= 0) { e.rainCd = e.type.rain.cd; bossRain(e); }
+        }
+        // patron: masa şoku (öfke fazında, yakın mesafede)
+        if (e.type.slam && e.enraged && d < 130) {
+          e.slamCd -= dt;
+          if (e.slamCd <= 0) {
+            e.slamCd = e.type.slam.cd;
+            e.slamWindT = e.type.slam.wind;
+            Sfx.play('tick');
+            continue;
+          }
+        }
         // fenomen aurası: yakın müşterileri hızlandırır
         if (e.type.aura) {
           const ar2 = e.type.aura.r * e.type.aura.r;
@@ -968,10 +1065,16 @@ function updateEnemies(dt) {
 
         let spd = e.spd;
         if (e.hasteT > 0) spd *= 1.45;
-        if (e.type.patron && e.hp < e.maxHp * 0.3) spd *= 1.5;   // öfke fazı
+        if (e.enraged) spd *= 1.15;                              // boss öfkesi
+        if (e.type.patron && e.hp < e.maxHp * 0.3) spd *= 1.5;   // patron çılgın fazı
         e.x += mx * spd * dt;
         e.y += my * spd * dt;
         e.flip = p.x < e.x;
+        // öfkeli boss'tan buhar tüter
+        if (e.enraged && Math.random() < 6 * dt) {
+          addPart({ x: e.x + rand(-8, 8), y: e.y - 16 * e.type.scale, vx: rand(-6, 6), vy: -rand(18, 32),
+            dur: 0.5, type: 'puff', col: pick([COL.red, COL.orange]), size: 2 });
+        }
       }
     }
 
@@ -1058,6 +1161,78 @@ function bossSummon(e) {
   }
   addFloat(e.x, e.y - 20 * e.type.scale, 'YARDIMA GELİN!', COL.purple);
   Sfx.play('akin');
+}
+
+// Toptancı: oyuncunun konumuna palet fırlatır (telegraf + alan hasarı)
+function bossLob(e) {
+  const p = Game.player, cfg = e.type.lob;
+  const dmgMul = 1 + Game.time / 60 * 0.12;
+  for (let i = 0; i < cfg.n; i++) {
+    Game.hazards.push({
+      kind: 'pallet', x0: e.x, y0: e.y - 20,
+      x: p.x + rand(-26, 26), y: p.y + rand(-20, 20),
+      r: cfg.r, dmg: cfg.dmg * dmgMul, warn: cfg.warn + i * 0.28, t: 0
+    });
+  }
+  addFloat(e.x, e.y - 20 * e.type.scale, 'PALETLERİ YÜKLEYİN!', COL.orange);
+  Sfx.play('box');
+}
+
+// Karaborsacı: gökten para yağar, düştüğü yer yakar
+function bossRain(e) {
+  const p = Game.player, cfg = e.type.rain;
+  const dmgMul = 1 + Game.time / 60 * 0.12;
+  for (let i = 0; i < cfg.n; i++) {
+    const tx = p.x + rand(-85, 85), ty = p.y + rand(-55, 55);
+    Game.hazards.push({
+      kind: 'bill', x0: tx + rand(-10, 10), y0: ty - 110,
+      x: tx, y: ty, r: cfg.r, dmg: cfg.dmg * dmgMul, warn: cfg.warn + i * 0.12, t: 0
+    });
+  }
+  addFloat(e.x, e.y - 20 * e.type.scale, 'KARA PARA YAĞIYOR!', COL.green);
+  Sfx.play('coin');
+}
+
+// ── Tehlike bölgeleri (boss telegraf saldırıları) + düşman şok halkaları ──
+function updateHazards(dt) {
+  const p = Game.player;
+  for (let i = Game.hazards.length - 1; i >= 0; i--) {
+    const h = Game.hazards[i];
+    h.t += dt;
+    if (h.t < h.warn) continue;
+    // patlama anı
+    if (dist2(h.x, h.y, p.x, p.y) < h.r * h.r) damagePlayer(h.dmg);
+    Game.shake = Math.max(Game.shake, h.kind === 'pallet' ? 3 : 1.5);
+    Sfx.play(h.kind === 'pallet' ? 'box' : 'hit');
+    const cols = h.kind === 'pallet' ? [COL.brown, COL.brownDark, COL.skinAlt] : [COL.green, COL.greenDark, COL.gold];
+    for (let k = 0; k < 8; k++) {
+      addPart({ x: h.x, y: h.y - 2, vx: rand(-70, 70), vy: rand(-80, -10), dur: 0.45,
+        type: 'px', col: pick(cols), size: 2 });
+    }
+    Game.hazards.splice(i, 1);
+  }
+  // düşman şok halkaları (patron slam'i): halka oyuncudan geçerken hasar
+  for (let i = Game.eRings.length - 1; i >= 0; i--) {
+    const r = Game.eRings[i];
+    r.r += 150 * dt;
+    if (!r.hitP) {
+      const d = Math.sqrt(dist2(r.x, r.y, p.x, p.y - 4));
+      if (Math.abs(d - r.r) < 9) { r.hitP = true; damagePlayer(r.dmg); }
+    }
+    if (r.r > r.maxR) Game.eRings.splice(i, 1);
+  }
+  // ambiyans: robot süpürgeler sahneden geçer
+  for (let i = Game.ambients.length - 1; i >= 0; i--) {
+    const a = Game.ambients[i];
+    a.t += dt;
+    a.x += a.dir * a.spd * dt;
+    a.y += Math.sin(a.t * 1.7 + a.wob) * 6 * dt;
+    if (Math.random() < 1.5 * dt) {
+      addPart({ x: a.x - a.dir * 6, y: a.y, vx: -a.dir * 8, vy: -rand(2, 6),
+        dur: 0.5, type: 'puff', col: COL.greyDark, size: 1 });
+    }
+    if (dist2(a.x, a.y, p.x, p.y) > 400 * 400) Game.ambients.splice(i, 1);
+  }
 }
 
 // ── Toplanabilirler ──
@@ -1196,6 +1371,14 @@ function updateFx(dt) {
     Game.decals[i].t += dt;
     if (Game.decals[i].t > Game.decals[i].dur) Game.decals.splice(i, 1);
   }
+  for (let i = Game.afterimgs.length - 1; i >= 0; i--) {
+    Game.afterimgs[i].t += dt;
+    if (Game.afterimgs[i].t > 0.22) Game.afterimgs.splice(i, 1);
+  }
+  for (let i = Game.beams.length - 1; i >= 0; i--) {
+    Game.beams[i].t += dt;
+    if (Game.beams[i].t > 0.6) Game.beams.splice(i, 1);
+  }
 }
 
 // ─── Çizim ───────────────────────────────────────────────────
@@ -1204,22 +1387,62 @@ function drawPlayField(ctx) {
   const p = Game.player;
   const W2S = (x, y) => [Math.round(x - camX + 240), Math.round(y - camY + 135)];
 
-  // zemin çatlakları (supleks izleri)
+  // zemin izleri: supleks çatlakları + lastik izleri
   for (const d of Game.decals) {
     const [sx, sy] = W2S(d.x, d.y);
     const a = clamp(1 - d.t / d.dur, 0, 1) * 0.4;
     if (a <= 0.01) continue;
     ctx.save();
     ctx.globalAlpha = a;
-    ctx.strokeStyle = COL.outline; ctx.lineWidth = 1;
-    for (let i = 0; i < 6; i++) {
-      const ca = (i / 6) * TAU + d.x * 0.7;
-      const r1 = d.r * 0.3, r2 = d.r * (0.7 + (i % 3) * 0.15);
-      ctx.beginPath();
-      ctx.moveTo(sx + Math.cos(ca) * r1, sy + Math.sin(ca) * r1 * 0.5);
-      ctx.lineTo(sx + Math.cos(ca + 0.3) * r2, sy + Math.sin(ca + 0.3) * r2 * 0.5);
-      ctx.stroke();
+    if (d.type === 'skid') {
+      ctx.fillStyle = COL.outline;
+      ctx.fillRect(sx - 5, sy - 4, 10, 1);
+      ctx.fillRect(sx - 5, sy + 3, 10, 1);
+    } else {
+      ctx.strokeStyle = COL.outline; ctx.lineWidth = 1;
+      for (let i = 0; i < 6; i++) {
+        const ca = (i / 6) * TAU + d.x * 0.7;
+        const r1 = d.r * 0.3, r2 = d.r * (0.7 + (i % 3) * 0.15);
+        ctx.beginPath();
+        ctx.moveTo(sx + Math.cos(ca) * r1, sy + Math.sin(ca) * r1 * 0.5);
+        ctx.lineTo(sx + Math.cos(ca + 0.3) * r2, sy + Math.sin(ca + 0.3) * r2 * 0.5);
+        ctx.stroke();
+      }
     }
+    ctx.restore();
+  }
+
+  // tehlike bölgeleri: yanıp sönen telegraf + havada uçan palet/banknot
+  for (const h of Game.hazards) {
+    const [sx, sy] = W2S(h.x, h.y);
+    const k = clamp(h.t / h.warn, 0, 1);
+    const blink = 0.35 + Math.sin(h.t * 18) * 0.2;
+    ctx.save();
+    ctx.globalAlpha = blink;
+    ctx.strokeStyle = h.kind === 'pallet' ? COL.orange : COL.green;
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.ellipse(sx, sy, h.r, h.r * 0.55, 0, 0, TAU); ctx.stroke();
+    // dolan iç halka: düşme anını gösterir
+    ctx.globalAlpha = blink * 0.55;
+    ctx.fillStyle = h.kind === 'pallet' ? COL.orange : COL.green;
+    ctx.beginPath(); ctx.ellipse(sx, sy, h.r * k, h.r * 0.55 * k, 0, 0, TAU); ctx.fill();
+    ctx.restore();
+    // uçan nesne
+    const fx = lerp(h.x0, h.x, k), fy = lerp(h.y0, h.y, k) - (h.kind === 'pallet' ? Math.sin(k * Math.PI) * 42 : 0);
+    const [ax, ay] = W2S(fx, fy);
+    const img = h.kind === 'pallet' ? SPR.pallet : SPR.bill;
+    ctx.drawImage(img, ax - (img.width >> 1), ay - (img.height >> 1));
+  }
+
+  // düşman şok halkaları (patron slam'i)
+  for (const r of Game.eRings) {
+    const [sx, sy] = W2S(r.x, r.y);
+    ctx.save();
+    ctx.globalAlpha = clamp(1 - r.r / r.maxR, 0.2, 0.85);
+    ctx.strokeStyle = COL.orange; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.ellipse(sx, sy, r.r, r.r * 0.6, 0, 0, TAU); ctx.stroke();
+    ctx.strokeStyle = COL.red; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.ellipse(sx, sy, r.r - 3, (r.r - 3) * 0.6, 0, 0, TAU); ctx.stroke();
     ctx.restore();
   }
 
@@ -1228,13 +1451,26 @@ function drawPlayField(ctx) {
     const [sx, sy] = W2S(c.x, c.y);
     if (sx < -30 || sx > 510 || sy < -30 || sy > 300) continue;
     const k = 1 - c.t / 0.45;
-    const spr = SPR.enemies[c.typeId];
+    const spr = SPR.bosses[c.typeId] || SPR.enemies[c.typeId];
     const v = c.flip ? spr.frames[0].f : spr.frames[0].n;
     const w = spr.w * c.scale, h = Math.max(2, spr.h * c.scale * Math.max(0.15, k));
     ctx.save();
     ctx.globalAlpha = k * 0.8;
     ctx.drawImage(v, Math.round(sx - w / 2), Math.round(sy - h), w, h);
     ctx.restore();
+  }
+
+  // ambiyans: robot süpürgeler (zeminde dolaşır)
+  for (const a of Game.ambients) {
+    const [sx, sy] = W2S(a.x, a.y);
+    if (sx < -20 || sx > 500 || sy < -20 || sy > 290) continue;
+    drawShadow(ctx, sx, sy + 1, 5, 2);
+    ctx.drawImage(a.dir > 0 ? SPR.roomba.n : SPR.roomba.f, sx - 5, sy - 6);
+    // led ışığı yanıp söner
+    if (((a.t * 3) | 0) % 2 === 0) {
+      ctx.fillStyle = COL.teal;
+      ctx.fillRect(sx + (a.dir > 0 ? 2 : -3), sy - 4, 1, 1);
+    }
   }
 
   // buhar bulutları (zeminde)
@@ -1324,6 +1560,13 @@ function drawPlayField(ctx) {
     }
   }
 
+  // oyuncu art izleri (dash/turbo silüetleri)
+  for (const ai of Game.afterimgs) {
+    const [sx, sy] = W2S(ai.x, ai.y);
+    const k = 1 - ai.t / 0.22;
+    drawSpr(ctx, SPR.chars[ai.charId], ai.frame, sx, sy + 1, { flip: ai.flip, alpha: k * 0.35 });
+  }
+
   // y'ye göre sıralanmış varlıklar (düşmanlar + oyuncu)
   const drawables = [];
   for (const e of Game.enemies) drawables.push({ y: e.y, e });
@@ -1347,8 +1590,9 @@ function drawPlayField(ctx) {
       continue;
     }
 
-    const spr = SPR.enemies[e.typeId];
-    const sc = e.type.scale * (1 + (e.popT > 0 ? e.popT * 1.7 : 0));
+    const spr = e.type.big ? SPR.bosses[e.typeId] : SPR.enemies[e.typeId];
+    const baseSc = e.type.big ? e.type.sprScale : e.type.scale;
+    const sc = baseSc * (1 + (e.popT > 0 ? e.popT * 1.7 : 0));
 
     // doğuş telegrafı: hayalet + ünlem
     if (e.spawnT > 0) {
@@ -1372,9 +1616,9 @@ function drawPlayField(ctx) {
     drawShadow(ctx, sx, sy, 6 * sc, 2.4 * sc);
     // supleks zıplaması: havaya fırlar
     const bounce = e.bounceT > 0 ? Math.round(Math.sin((1 - e.bounceT / 0.35) * Math.PI) * 7) : 0;
-    // elit/boss parlaması: arkadan nabız gibi atan hale
+    // elit/boss parlaması: arkadan nabız gibi atan hale (öfkede hızlı ve güçlü)
     if (e.type.elite || e.type.boss) {
-      const ga = 0.14 + Math.sin(e.animT * 5) * 0.08;
+      const ga = (e.enraged ? 0.24 : 0.14) + Math.sin(e.animT * (e.enraged ? 9 : 5)) * 0.08;
       const gv = e.flip ? spr.frames[0].wf : spr.frames[0].wn;
       const gw = spr.w * sc, gh = spr.h * sc;
       ctx.save();
@@ -1386,13 +1630,26 @@ function drawPlayField(ctx) {
     }
     const frame = e.stun > 0 ? 0 : ((e.animT * 7) | 0) % 2;
     const fuseFlash = e.fuseT >= 0 && ((e.fuseT * 14) | 0) % 2 === 0;
-    drawSpr(ctx, spr, frame, sx, sy + 1 - bounce, { flip: e.flip, scale: sc, white: e.flash > 0 || fuseFlash });
+    // gece müşterisi: yarı saydam, hayalet gibi titrer
+    const gAlpha = e.type.ghostly ? 0.6 + Math.sin(e.animT * 13) * 0.18 : undefined;
+    drawSpr(ctx, spr, frame, sx, sy + 1 - bounce,
+      { flip: e.flip, scale: sc, white: e.flash > 0 || fuseFlash, alpha: gAlpha });
     if (e.stun > 0) {
       drawText(ctx, '?', sx - 2, sy - spr.h * sc - 8, COL.yellow, { shadow: COL.outline });
     }
     // atılış telegrafı: kırmızı ünlem
     if (e.windT > 0) {
       drawText(ctx, '!', sx - 2, sy - spr.h * sc - 8, COL.red, { shadow: COL.outline });
+    }
+    // masa şoku telegrafı: büyüyen turuncu ikaz halkası
+    if (e.slamWindT > 0 && e.type.slam) {
+      const k = 1 - e.slamWindT / e.type.slam.wind;
+      const wr = 12 + e.type.slam.maxR * 0.5 * k;
+      ctx.save();
+      ctx.globalAlpha = 0.35 + Math.sin(Game.time * 20) * 0.18;
+      ctx.strokeStyle = COL.orange; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.ellipse(sx, sy, wr, wr * 0.6, 0, 0, TAU); ctx.stroke();
+      ctx.restore();
     }
     // elit/boss can barı
     if ((e.type.elite || e.type.boss) && e.hp < e.maxHp) {
@@ -1424,10 +1681,20 @@ function drawPlayField(ctx) {
     ctx.drawImage(c.dir > 0 ? SPR.car.n : SPR.car.f, sx - 16, sy - 15);
   }
 
-  // iadeci mermileri
+  // düşman mermileri: koli / dönen yıldız / banknot
   for (const s of Game.eShots) {
     const [sx, sy] = W2S(s.x, s.y);
-    ctx.drawImage(SPR.minibox, sx - 4, sy - 3);
+    if (s.spr === 'star') {
+      ctx.save();
+      ctx.translate(sx, sy);
+      ctx.rotate(s.t * 7);
+      ctx.drawImage(SPR.star, -3, -3);
+      ctx.restore();
+    } else if (s.spr === 'bill') {
+      ctx.drawImage(SPR.bill, sx - 4, sy - 2 + Math.sin(s.t * 9) * 1.5);
+    } else {
+      ctx.drawImage(SPR.minibox, sx - 4, sy - 3);
+    }
   }
 
   // oyuncu mermileri: zımba telleri + mailler
@@ -1483,7 +1750,39 @@ function drawPlayField(ctx) {
     } else if (pt.type === 'spark') {
       ctx.fillStyle = pt.col;
       ctx.fillRect(sx - 1, sy, 3, 1); ctx.fillRect(sx, sy - 1, 1, 3);
+    } else if (pt.type === 'ghost') {
+      // yükselen müşteri ruhu: hafif sağa sola salınır
+      const wob = Math.sin(pt.t * 9) * 2;
+      ctx.globalAlpha = k * 0.75;
+      ctx.drawImage(SPR.ghost, Math.round(sx + wob) - 3, sy - 4);
+    } else if (pt.type === 'crit') {
+      // kritik çakması: büyüyen 4 kollu yıldız
+      const r = pt.size * (0.4 + (1 - k) * 1.2);
+      ctx.fillStyle = pt.col;
+      ctx.fillRect(sx - r, sy, r * 2 + 1, 1);
+      ctx.fillRect(sx, sy - r, 1, r * 2 + 1);
+      ctx.fillStyle = COL.white;
+      ctx.fillRect(sx - 1, sy - 1, 3, 3);
     }
+    ctx.restore();
+  }
+
+  // seviye atlama ışık huzmeleri (varlıkların üstünde parlar)
+  for (const b of Game.beams) {
+    const [sx, sy] = W2S(b.x, b.y);
+    const k = 1 - b.t / 0.6;
+    const w = 5 + k * 9;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = k * 0.5;
+    const g = ctx.createLinearGradient(0, sy - 130, 0, sy);
+    g.addColorStop(0, 'rgba(44,232,245,0)');
+    g.addColorStop(1, 'rgba(44,232,245,0.9)');
+    ctx.fillStyle = g;
+    ctx.fillRect(Math.round(sx - w / 2), sy - 130, Math.round(w), 130);
+    ctx.globalAlpha = k * 0.8;
+    ctx.fillStyle = 'rgba(244,244,248,0.8)';
+    ctx.fillRect(Math.round(sx - 1), sy - 110, 2, 110);
     ctx.restore();
   }
 
@@ -1535,41 +1834,50 @@ function drawPlayerSprite(ctx) {
   const frame = p.moving ? ((p.animT * 9) | 0) % 2 : 0;
   const bob = p.moving ? 0 : Math.round(Math.sin(Game.time * 3) * 0.8);
   const py = sy + 1 + bob;
-  drawSpr(ctx, SPR.chars[p.charId], frame, sx, py, { flip: p.flip, white: p.hurtFlash > 0.15 });
-  const top = py - 17;   // sprite üst kenarı
 
-  // ── itemler karakterin üstünde görünür ──
+  // ── gövde + baret: yöne eğilme ve dönüş büzüşmesiyle çizilir ──
+  const turnK = p.turnT > 0 ? Math.sin((p.turnT / 0.12) * Math.PI) : 0;
+  ctx.save();
+  ctx.translate(sx, py);
+  if (Math.abs(p.lean) > 0.004) ctx.rotate(p.lean);
+  if (turnK > 0.01) ctx.scale(1 - turnK * 0.35, 1);
+  drawSpr(ctx, SPR.chars[p.charId], frame, 0, 0, { flip: p.flip, white: p.hurtFlash > 0.15 });
+  const top = -17;   // sprite üst kenarı (yerel koordinat)
+
   // iş güvenliği: sarı baret (SV3+ ışıklı)
   if (p.items['sigorta']) {
     ctx.fillStyle = COL.gold;
-    ctx.fillRect(sx - 4, top, 8, 2);
-    ctx.fillRect(sx - 6, top + 2, 12, 1);
+    ctx.fillRect(-4, top, 8, 2);
+    ctx.fillRect(-6, top + 2, 12, 1);
     ctx.fillStyle = COL.yellow;
-    ctx.fillRect(sx - 2, top, 4, 1);
+    ctx.fillRect(-2, top, 4, 1);
     if (p.items['sigorta'] >= 3 && ((Game.time * 2) | 0) % 2) {
-      ctx.fillStyle = COL.red; ctx.fillRect(sx - 1, top - 1, 2, 1);
+      ctx.fillStyle = COL.red; ctx.fillRect(-1, top - 1, 2, 1);
     }
   }
-  // robot kol: omuzda görünür mekanik kol, yumrukta uzanır
-  if (p.items['robotkol']) {
+  // robot kol: omuzda duran mekanik kol (yumruk dışarıda çizilir)
+  if (p.items['robotkol'] && !p.armAnim) {
+    const side = p.flip ? -1 : 1;
+    const ax = side * 7, ay = -9;
+    ctx.fillStyle = COL.greyDark; ctx.fillRect(ax - 1, ay - 2, 3, 6);
+    ctx.fillStyle = COL.grey; ctx.fillRect(ax, ay - 2, 2, 5);
+    ctx.fillStyle = COL.teal; ctx.fillRect(ax, ay, 1, 1);
+    if (p.items['robotkol'] >= 3) { ctx.fillStyle = COL.greyLight; ctx.fillRect(ax - 1, ay + 4, 4, 2); }
+  }
+  ctx.restore();
+
+  // robot kol yumruğu: dünya hedefine uzanır (dönüşten etkilenmez)
+  if (p.items['robotkol'] && p.armAnim) {
     const side = p.flip ? -1 : 1;
     const ax = sx + side * 7, ay = py - 9;
-    if (p.armAnim) {
-      // uzanan yumruk
-      const k = Math.sin((p.armAnim.t / 0.16) * Math.PI);
-      const tx2 = Math.round(p.armAnim.tx - Game.camX + 240);
-      const ty2 = Math.round(p.armAnim.ty - Game.camY + 135);
-      const hx = Math.round(lerp(ax, tx2, k)), hy = Math.round(lerp(ay, ty2, k));
-      ctx.strokeStyle = COL.grey; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(hx, hy); ctx.stroke();
-      ctx.fillStyle = COL.greyLight; ctx.fillRect(hx - 2, hy - 2, 4, 4);
-      ctx.fillStyle = COL.teal; ctx.fillRect(hx - 1, hy - 1, 2, 2);
-    } else {
-      ctx.fillStyle = COL.greyDark; ctx.fillRect(ax - 1, ay - 2, 3, 6);
-      ctx.fillStyle = COL.grey; ctx.fillRect(ax, ay - 2, 2, 5);
-      ctx.fillStyle = COL.teal; ctx.fillRect(ax, ay, 1, 1);
-      if (p.items['robotkol'] >= 3) { ctx.fillStyle = COL.greyLight; ctx.fillRect(ax - 1, ay + 4, 4, 2); }
-    }
+    const k = Math.sin((p.armAnim.t / 0.16) * Math.PI);
+    const tx2 = Math.round(p.armAnim.tx - Game.camX + 240);
+    const ty2 = Math.round(p.armAnim.ty - Game.camY + 135);
+    const hx = Math.round(lerp(ax, tx2, k)), hy = Math.round(lerp(ay, ty2, k));
+    ctx.strokeStyle = COL.grey; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(hx, hy); ctx.stroke();
+    ctx.fillStyle = COL.greyLight; ctx.fillRect(hx - 2, hy - 2, 4, 4);
+    ctx.fillStyle = COL.teal; ctx.fillRect(hx - 1, hy - 1, 2, 2);
   }
   // bayat kahve: koşarken hız çizgileri
   if (p.items['kahve'] >= 2 && p.moving && Math.random() < 0.06 * p.items['kahve']) {

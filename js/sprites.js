@@ -137,6 +137,122 @@ function buildEnemySprite(def) {
   return { w: 12, h: 14, frames };
 }
 
+// ─── Boss gövdeleri (18x20, her boss'a özel çizim) ───────────
+// Ortak lejant: o=dış hat, k=ten, e=göz, v=kaş, m=bıyık/ağız
+const BOSS_SPRITES = {
+  toptanci: {
+    map: {
+      o: COL.outline, k: COL.skinAlt, e: COL.navyDark, v: COL.hairDark,
+      m: COL.hairDark, S: COL.purpleDark, s: COL.hairDark, G: COL.gold, b: COL.navyDark
+    },
+    rows: [
+      '.....oooooooo.....',
+      '....okkkkkkkko....',
+      '...okkkkkkkkkko...',
+      '...okvvkkkkvvko...',
+      '...okeekkkkeeko...',
+      '...okkkkkkkkkko...',
+      '...okmmmmmmmmko...',
+      '....okkmmmmkko....',
+      '..ooSSSSSSSSSSoo..',
+      '.oSSSGGGGGGGGSSSo.',
+      'oSSSSSSSSSSSSSSSSo',
+      'oSkSSSSSSSSSSSSkSo',
+      'okkSSSSSSSSSSSSkko',
+      'okkSsSSSSSSSSsSkko',
+      '.ooSssSSSSSSssSoo.',
+      '..oSSssssssssSSo..',
+      '..obbbbbbbbbbbbo..',
+      '..obbbbo..obbbbo..',
+      '..obbbo....obbbo..',
+      '...ooo......ooo...'
+    ],
+    legsB: [
+      '.obbbbo....obbbbo.',
+      '.obbbo......obbbo.',
+      '..ooo........ooo..'
+    ]
+  },
+  karaborsaci: {
+    map: {
+      o: COL.outline, k: COL.skinAlt, h: COL.hairDark, X: COL.outline,
+      m: COL.brownDark, C: COL.hairDark, c: COL.outline, G: COL.gold, b: COL.navyDark
+    },
+    rows: [
+      '.....oooooooo.....',
+      '....ohhhhhhhho....',
+      '....ohhhhhhhho....',
+      '..oohhhhhhhhhhoo..',
+      '.ohhhhhhhhhhhhhho.',
+      '....okkkkkkkko....',
+      '....oXXkkkkXXo....',
+      '....okkkkkkkko....',
+      '....okkmmmmkko....',
+      '...oCCCkkkkCCCo...',
+      '..oCCCCCCCCCCCCo..',
+      '.oCCcCCCCCCCCcCCo.',
+      '.oCCcCGGGGGGcCCCo.',
+      '.oCCcCCCCCCCCcCCo.',
+      '.oCCcCCCCCCCCcCCo.',
+      '.oCCccCCCCCCccCCo.',
+      '..oCCCCCCCCCCCCo..',
+      '..obbo......obbo..',
+      '..obbo......obbo..',
+      '..oooo......oooo..'
+    ],
+    legsB: [
+      '.obbo........obbo.',
+      '.obbo........obbo.',
+      '.oooo........oooo.'
+    ]
+  },
+  patron: {
+    map: {
+      o: COL.outline, k: COL.skin, e: COL.navyDark, v: COL.hairDark,
+      m: COL.brownDark, g: COL.grey, p: COL.orange, A: COL.outline,
+      W: COL.white, R: COL.red, G: COL.gold
+    },
+    rows: [
+      '.....oooooooo.....',
+      '....oggggggggo....',
+      '...okgkkkkkkgko...',
+      '...okvvkkkkvvko...',
+      '...okeekkkkeeko...',
+      '...okkkkkkkkkko...',
+      '...okkkmmmmkkko...',
+      '....okkkkkkkkop...',
+      '..ooAAAAWWAAAAoo..',
+      '.oAAAAAWRRWAAAAAo.',
+      'oAAAAAAWRRWAAAAAAo',
+      'oAkAAAAWRRWAAAAkAo',
+      'okkAAAAWRRWAAAAkko',
+      'okGAAAAARRAAAAAGko',
+      '.ooAAAAARRAAAAAoo.',
+      '..oAAAAAAAAAAAAo..',
+      '..oAAAAAAAAAAAAo..',
+      '..oAAAo....oAAAo..',
+      '..oAAAo....oAAAo..',
+      '..ooooo....ooooo..'
+    ],
+    legsB: [
+      '.oAAAo......oAAAo.',
+      '.oAAAo......oAAAo.',
+      '.ooooo......ooooo.'
+    ]
+  }
+};
+
+function buildBossSprite(def) {
+  const frames = [];
+  const rowsB = def.rows.slice(0, def.rows.length - def.legsB.length).concat(def.legsB);
+  for (const rows of [def.rows, rowsB]) {
+    const c = makeCanvas(rows[0].length, rows.length);
+    gridPaint(c.getContext('2d'), rows, def.map, 0, 0);
+    frames.push(makeVariant(c));
+  }
+  return { w: def.rows[0].length, h: def.rows.length, frames };
+}
+
 // ─── Küçük sprite'lar ────────────────────────────────────────
 function buildGrid(rows, map) {
   const c = makeCanvas(rows[0].length, rows.length);
@@ -319,6 +435,47 @@ const MOP_ROWS = [
   '.G.G.G.'
 ];
 
+// ─── Yıldız mermisi (bir yıldızcı, 7x7) ──────────────────────
+const STAR_ROWS = [
+  '...Y...',
+  '..YYY..',
+  'YYYGYYY',
+  '.YYGYY.',
+  '..YYY..',
+  '.YY.YY.',
+  'Y.....Y'
+];
+
+// ─── Banknot (karaborsacı para yağmuru, 8x5) ─────────────────
+const BILL_ROWS = [
+  'oooooooo',
+  'ogGGGGgo',
+  'ogGWWGgo',
+  'ogGGGGgo',
+  'oooooooo'
+];
+
+// ─── Ruh (ölen müşterinin hayaleti, 7x7) ─────────────────────
+const GHOST_ROWS = [
+  '.ooooo.',
+  'oWWWWWo',
+  'oWeWeWo',
+  'oWWWWWo',
+  'oWWWWWo',
+  'oWWWWWo',
+  'oW.W.Wo'
+];
+
+// ─── Robot süpürge (ambiyans, 10x6) ──────────────────────────
+const ROOMBA_ROWS = [
+  '..oooooo..',
+  '.oCCCCCCo.',
+  'oCCTTTTCCo',
+  'oCCCCCCCCo',
+  '.oggggggo.',
+  '..o.oo.o..'
+];
+
 // ─── Kırılabilir nesneler ────────────────────────────────────
 const KASA_ROWS = [
   '.oooooooooooo.',
@@ -403,6 +560,125 @@ function buildForklift() {
     x.fillStyle = COL.outline; x.fillRect(wx, 15, 5, 5);
     x.fillStyle = COL.navyDark; x.fillRect(wx + 1, 16, 3, 3);
   }
+  return c;
+}
+
+// ─── Bölge dekorları (programatik) ───────────────────────────
+function buildFreezer() {
+  const c = makeCanvas(22, 26);
+  const x = c.getContext('2d');
+  // gövde
+  x.fillStyle = COL.outline; x.fillRect(0, 0, 22, 26);
+  x.fillStyle = COL.greyLight; x.fillRect(1, 1, 20, 24);
+  x.fillStyle = COL.grey; x.fillRect(1, 20, 20, 5);
+  // cam kapak: içinde buzlu ürünler
+  x.fillStyle = COL.blueDark; x.fillRect(3, 3, 16, 13);
+  x.fillStyle = COL.cyan; x.fillRect(4, 4, 14, 11);
+  x.fillStyle = COL.teal; x.fillRect(4, 4, 14, 3);
+  x.fillStyle = COL.white; x.fillRect(5, 5, 3, 1); x.fillRect(10, 7, 4, 2); x.fillRect(6, 10, 3, 3);
+  // kapak kolu + ışık
+  x.fillStyle = COL.greyDark; x.fillRect(3, 17, 16, 2);
+  x.fillStyle = COL.green; x.fillRect(17, 21, 2, 2);
+  // buz sarkıtları
+  x.fillStyle = COL.white; x.fillRect(2, 25, 1, 1); x.fillRect(8, 25, 1, 1); x.fillRect(15, 25, 1, 1);
+  return c;
+}
+
+function buildIceStack() {
+  const c = makeCanvas(18, 14);
+  const x = c.getContext('2d');
+  // buz blokları: yarı saydam mavi küpler
+  const block = (bx, by, w, h) => {
+    x.fillStyle = COL.blueDark; x.fillRect(bx, by, w, h);
+    x.fillStyle = COL.cyan; x.fillRect(bx + 1, by + 1, w - 2, h - 2);
+    x.fillStyle = COL.teal; x.fillRect(bx + 1, by + 1, w - 2, 2);
+    x.fillStyle = COL.white; x.fillRect(bx + 2, by + 2, 2, 1);
+  };
+  block(0, 6, 9, 8); block(9, 6, 9, 8); block(4, 0, 9, 7);
+  return c;
+}
+
+function buildTruck() {
+  const c = makeCanvas(34, 26);
+  const x = c.getContext('2d');
+  // kasa (arkadan görünüm, kapağı açık)
+  x.fillStyle = COL.outline; x.fillRect(0, 0, 34, 22);
+  x.fillStyle = COL.greyDark; x.fillRect(1, 1, 32, 20);
+  x.fillStyle = COL.navyDark; x.fillRect(3, 3, 28, 16);
+  // içerideki koliler
+  x.fillStyle = COL.skinAlt; x.fillRect(5, 11, 8, 8); x.fillRect(14, 13, 7, 6);
+  x.fillStyle = COL.brown; x.fillRect(8, 11, 2, 8); x.fillRect(14, 15, 7, 1);
+  x.fillStyle = COL.skinAlt; x.fillRect(7, 5, 7, 5);
+  x.fillStyle = COL.brown; x.fillRect(10, 5, 1, 5);
+  // marka şeridi + tampon
+  x.fillStyle = COL.red; x.fillRect(1, 1, 32, 2);
+  x.fillStyle = COL.grey; x.fillRect(0, 22, 34, 2);
+  // stop lambaları + tekerlekler
+  x.fillStyle = COL.red; x.fillRect(1, 19, 2, 2); x.fillRect(31, 19, 2, 2);
+  x.fillStyle = COL.outline; x.fillRect(4, 24, 6, 2); x.fillRect(24, 24, 6, 2);
+  return c;
+}
+
+function buildTireStack() {
+  const c = makeCanvas(14, 12);
+  const x = c.getContext('2d');
+  for (let i = 0; i < 3; i++) {
+    const ty = 8 - i * 4;
+    x.fillStyle = COL.outline; x.fillRect(1, ty, 12, 4);
+    x.fillStyle = COL.navyDark; x.fillRect(2, ty + 1, 10, 2);
+    x.fillStyle = COL.greyDark; x.fillRect(5, ty + 1, 4, 1);
+  }
+  return c;
+}
+
+function buildDesk() {
+  const c = makeCanvas(26, 18);
+  const x = c.getContext('2d');
+  // masa tablası + ayaklar
+  x.fillStyle = COL.outline; x.fillRect(0, 8, 26, 3);
+  x.fillStyle = COL.brown; x.fillRect(1, 8, 24, 2);
+  x.fillStyle = COL.brownDark; x.fillRect(1, 11, 2, 7); x.fillRect(23, 11, 2, 7);
+  // monitör
+  x.fillStyle = COL.outline; x.fillRect(4, 0, 10, 8);
+  x.fillStyle = COL.teal; x.fillRect(5, 1, 8, 5);
+  x.fillStyle = COL.cyan; x.fillRect(6, 2, 4, 1); x.fillRect(6, 4, 6, 1);
+  x.fillStyle = COL.greyDark; x.fillRect(8, 8, 2, 1);
+  // klavye + kahve kupası
+  x.fillStyle = COL.greyDark; x.fillRect(15, 6, 7, 2);
+  x.fillStyle = COL.white; x.fillRect(19, 3, 3, 3);
+  x.fillStyle = COL.brown; x.fillRect(20, 4, 1, 1);
+  return c;
+}
+
+function buildPlant() {
+  const c = makeCanvas(12, 16);
+  const x = c.getContext('2d');
+  // saksı
+  x.fillStyle = COL.outline; x.fillRect(2, 10, 8, 6);
+  x.fillStyle = COL.orangeDark; x.fillRect(3, 11, 6, 4);
+  x.fillStyle = COL.orange; x.fillRect(3, 11, 6, 1);
+  // yapraklar
+  x.fillStyle = COL.greenDeep; x.fillRect(5, 1, 2, 9);
+  x.fillStyle = COL.greenDark;
+  x.fillRect(2, 3, 3, 4); x.fillRect(7, 2, 4, 4);
+  x.fillStyle = COL.green;
+  x.fillRect(3, 4, 2, 2); x.fillRect(8, 3, 2, 2); x.fillRect(5, 0, 2, 3);
+  return c;
+}
+
+function buildCooler() {
+  const c = makeCanvas(10, 20);
+  const x = c.getContext('2d');
+  // damacana
+  x.fillStyle = COL.blueDark; x.fillRect(1, 0, 8, 7);
+  x.fillStyle = COL.cyan; x.fillRect(2, 1, 6, 5);
+  x.fillStyle = COL.white; x.fillRect(3, 2, 2, 2);
+  // gövde
+  x.fillStyle = COL.outline; x.fillRect(0, 7, 10, 13);
+  x.fillStyle = COL.greyLight; x.fillRect(1, 8, 8, 11);
+  x.fillStyle = COL.grey; x.fillRect(1, 15, 8, 4);
+  x.fillStyle = COL.cyan; x.fillRect(3, 10, 2, 2);
+  x.fillStyle = COL.red; x.fillRect(6, 10, 2, 2);
   return c;
 }
 
@@ -533,6 +809,10 @@ function buildAllSprites() {
   SPR.enemies = {};
   for (const id in ENEMY_TYPES) SPR.enemies[id] = buildEnemySprite(ENEMY_TYPES[id]);
 
+  // boss'lara özel büyük gövdeler
+  SPR.bosses = {};
+  for (const id in BOSS_SPRITES) SPR.bosses[id] = buildBossSprite(BOSS_SPRITES[id]);
+
   const chipMap = { o: COL.outline, T: COL.teal, t: COL.cyan, G: COL.gold };
   SPR.chip = buildGrid(CHIP_ROWS, chipMap);
   SPR.chipGold = buildGrid(CHIP_ROWS, { o: COL.outline, T: COL.yellow, t: COL.gold, G: COL.gold });
@@ -560,10 +840,27 @@ function buildAllSprites() {
   SPR.pkShield = buildGrid(PK_SHIELD_ROWS, { T: COL.teal, W: COL.white });
   SPR.pkTurbo = buildGrid(PK_TURBO_ROWS, { Y: COL.yellow });
 
+  SPR.star = buildGrid(STAR_ROWS, { Y: COL.yellow, G: COL.gold });
+  SPR.bill = buildGrid(BILL_ROWS, { o: COL.greenDeep, g: COL.greenDark, G: COL.green, W: COL.white });
+  SPR.ghost = buildGrid(GHOST_ROWS, { o: COL.greyLight, W: COL.white, e: COL.cyan });
+  const roomba = buildGrid(ROOMBA_ROWS, { o: COL.outline, C: COL.greyDark, T: COL.teal, g: COL.navyDark });
+  SPR.roomba = { n: roomba, f: flipOf(roomba) };
+  SPR.pallet = buildPallet();
+
   const car = buildCar();
   SPR.car = { n: car, f: flipOf(car) };
 
   SPR.props = [buildShelf(), buildPallet(), buildBoxStack(), buildBarrel(), buildCone(), buildForklift()];
+
+  // bölgeye özel dekor setleri
+  const freezer = buildFreezer(), ice = buildIceStack(), truck = buildTruck(),
+        tires = buildTireStack(), desk = buildDesk(), plant = buildPlant(), cooler = buildCooler();
+  SPR.zoneProps = {
+    depo: SPR.props,
+    soguk: [freezer, ice, freezer, ice, buildBarrel(), buildPallet()],
+    rampa: [truck, tires, buildCone(), buildPallet(), tires, buildCone()],
+    ofis: [desk, plant, cooler, desk, plant, buildBoxStack()]
+  };
 
   SPR.icons = {};
   for (const id of ['suplex', 'car', 'wave', 'burp', 'puff', 'box', 'zimba', 'mail', 'mop',

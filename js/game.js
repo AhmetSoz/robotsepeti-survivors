@@ -13,6 +13,9 @@ const Game = {
   enemies: [], eShots: [], boxes: [], clouds: [], rings: [],
   cars: [], shocks: [], cones: [], pickups: [], parts: [], floats: [],
   projs: [], corpses: [], decals: [],
+  hazards: [], eRings: [], afterimgs: [], beams: [], ambients: [],
+  bossIntro: null, curZone: 'depo', roombaT: 6, sparkT: 12,
+  ringT: 20, bossChestT: 0,
   spawnAcc: 0, eliteT: 60, hordeT: 120, bossIdx: 0, bossAlive: false, hordeN: 0,
   banner: null, flashT: 0, flashCol: '255,255,255',
   combo: 0, comboT: 0, comboBest: 0,
@@ -36,6 +39,9 @@ const Game = {
     this.rings = []; this.cars = []; this.shocks = []; this.cones = [];
     this.pickups = []; this.parts = []; this.floats = [];
     this.projs = []; this.corpses = []; this.decals = [];
+    this.hazards = []; this.eRings = []; this.afterimgs = []; this.beams = []; this.ambients = [];
+    this.bossIntro = null; this.curZone = 'depo'; this.roombaT = 6; this.sparkT = 12;
+    this.ringT = 20; this.bossChestT = 0;
     this.spawnAcc = 0; this.hordeT = 120; this.bossIdx = 0; this.bossAlive = false; this.hordeN = 0;
     this.flashT = 0;
     this.combo = 0; this.comboT = 0; this.comboBest = 0;
@@ -89,9 +95,54 @@ const Game = {
     updateWeaponEntities(dt);
     updateEnemies(dt);
     updatePickups(dt);
+    updateHazards(dt);
     updateFx(dt);
     this.director(dt);
     Missions.update(dt);
+
+    // boss giriş sineması sayacı
+    if (this.bossIntro) {
+      this.bossIntro.t += dt;
+      if (this.bossIntro.t > 2.2) this.bossIntro = null;
+    }
+
+    // boss ödülü: ölüm şovu bitince büyük koli kendiliğinden açılır
+    if (this.bossChestT > 0) {
+      this.bossChestT -= dt;
+      if (this.bossChestT <= 0) {
+        this.banner = { txt: 'BOSS ÖDÜLÜ: BÜYÜK KARGO!', t: 0 };
+        this.openChest(true);
+        return;
+      }
+    }
+
+    // bölge takibi: yeni bölgeye girince ismi duyur
+    const zid = zoneAt(Math.floor(this.player.x / 16), Math.floor(this.player.y / 16));
+    if (zid !== this.curZone) {
+      this.curZone = zid;
+      if (this.time > 2 && !this.banner) {
+        this.banner = { txt: '— ' + ZONE_DEFS[zid].name + ' —', t: 0.8 };
+      }
+    }
+
+    // ambiyans: robot süpürge sahneden geçer
+    this.roombaT -= dt;
+    if (this.roombaT <= 0 && this.ambients.length < 3) {
+      this.roombaT = rand(14, 26);
+      const dir = Math.random() < 0.5 ? 1 : -1;
+      this.ambients.push({ x: this.player.x - dir * 300, y: this.player.y + rand(-110, 110),
+        dir, spd: rand(22, 38), t: 0, wob: rand(TAU) });
+    }
+    // ambiyans: tavandan kıvılcım yağmuru
+    this.sparkT -= dt;
+    if (this.sparkT <= 0) {
+      this.sparkT = rand(8, 16);
+      const wx = this.player.x + rand(-190, 190), wy = this.player.y + rand(-110, 110);
+      for (let i = 0; i < 6; i++) {
+        addPart({ x: wx + rand(-3, 3), y: wy - 60 - rand(0, 20), vx: rand(-12, 12), vy: rand(40, 90),
+          dur: rand(0.4, 0.7), type: 'spark', col: pick([COL.yellow, COL.white, COL.gold]) });
+      }
+    }
 
     // kombo penceresi
     if (this.comboT > 0) {
@@ -131,8 +182,9 @@ const Game = {
     const cap = t > 420 ? 180 : 140;
 
     // sürekli akış: akın sonrası kısa nefes molası, son dakikada çılgınlık
+    // 5. dakikadan sonra temposu ekstra artar (hız itemleri rahatlatmasın)
     if (this.lullT > 0) this.lullT -= dt;
-    let rate = (1.1 + t * 0.011) * (this.lullT > 0 ? 0.45 : 1);
+    let rate = (1.1 + t * 0.011 + Math.max(0, (t - 300) * 0.0035)) * (this.lullT > 0 ? 0.45 : 1);
     if (t > WIN_TIME - 50) rate *= 2.2;
     this.spawnAcc += rate * dt;
     while (this.spawnAcc >= 1) {
@@ -150,6 +202,22 @@ const Game = {
         const a = rand(TAU), r = rand(120, 240);
         spawnEnemy(Math.random() < 0.6 ? 'kasa' : 'varil',
           this.player.x + Math.cos(a) * r, this.player.y + Math.sin(a) * r);
+      }
+    }
+
+    // kuşatma çemberi (5. dakikadan sonra): oyuncuyu daireyle sıkıştırır
+    if (t > 300) {
+      this.ringT -= dt;
+      if (this.ringT <= 0) {
+        this.ringT = 42;
+        const n = 12 + Math.floor(t / 90);
+        if (!this.banner) this.banner = { txt: 'KUŞATILIYORSUN!', t: 0 };
+        Sfx.play('akin');
+        for (let i = 0; i < n; i++) {
+          const a = (i / n) * TAU + rand(0.25);
+          const id = i % 6 === 0 ? 'kuponcu' : (i % 4 === 0 ? 'kararsiz' : 'aceleci');
+          spawnEnemy(id, this.player.x + Math.cos(a) * 235, this.player.y + Math.sin(a) * 235);
+        }
       }
     }
 
@@ -207,11 +275,13 @@ const Game = {
     // boss takvimi
     if (this.bossIdx < BOSS_SCHEDULE.length && t >= BOSS_SCHEDULE[this.bossIdx].t) {
       const b = BOSS_SCHEDULE[this.bossIdx++];
-      this.spawnAt(b.id);
+      const boss = this.spawnAt(b.id);
       this.bossAlive = true;
       this.banner = { txt: b.banner, t: 0 };
+      this.bossIntro = { t: 0, name: ENEMY_TYPES[b.id].name };
+      this.shocks.push({ x: boss.x, y: boss.y - 8, r: 70, t: 0, col: COL.purple });
       Sfx.play('boss');
-      this.shake = Math.max(this.shake, 3);
+      this.shake = Math.max(this.shake, 4);
     }
   },
 
@@ -235,7 +305,7 @@ const Game = {
   spawnAt(typeId) {
     const a = rand(TAU);
     const r = 280 + rand(40);
-    spawnEnemy(typeId, this.player.x + Math.cos(a) * r, this.player.y + Math.sin(a) * r);
+    return spawnEnemy(typeId, this.player.x + Math.cos(a) * r, this.player.y + Math.sin(a) * r);
   },
 
   // ── seviye atlama ──
@@ -258,6 +328,8 @@ const Game = {
         addPart({ x: p.x + Math.cos(a) * 10, y: p.y - 8 + Math.sin(a) * 6,
           vx: Math.cos(a) * 70, vy: Math.sin(a) * 40 - 20, dur: 0.5, type: 'spark', col: COL.teal });
       }
+      // gökten inen ışık huzmesi
+      this.beams.push({ x: p.x, y: p.y, t: 0 });
       // küçük iyileşme + kalıcı güç artışı (recalcStats seviyeyi okur)
       p.hp = Math.min(p.maxHp, p.hp + Math.round(p.maxHp * 0.06));
       recalcStats(p);
@@ -350,8 +422,8 @@ const Game = {
     }) || null;
   },
 
-  // ── kargo kolisi (sandık) ──
-  openChest() {
+  // ── kargo kolisi (sandık) ── bossReward: boss ödülü, garantili büyük koli
+  openChest(bossReward) {
     const p = this.player;
 
     // önce evrim kontrolü: koşullar sağlanıyorsa koli evrim getirir
@@ -359,7 +431,7 @@ const Game = {
     if (evoW) {
       const ev = EVOLUTIONS[evoW.id];
       evoW.evolved = true;
-      this.coins += 5;
+      this.coins += bossReward ? 15 : 5;
       this.score += Math.round(400 * p.greed);
       this.chestAnim = { t: 0, rewards: [{ name: ev.name, icon: evoW.id, evolve: true, desc: ev.desc }], evolve: true };
       this.state = 'chest';
@@ -370,6 +442,7 @@ const Game = {
 
     const roll = Math.random();
     let count = roll < 0.65 ? 1 : (roll < 0.93 ? 3 : 5);
+    if (bossReward) count = Math.max(3, count);
     if (p.charId === 'berker') count++;
     const rewards = [];
     for (let i = 0; i < count; i++) {
@@ -395,9 +468,9 @@ const Game = {
         rewards.push({ name: o.name + ' SV' + p.items[o.id], icon: o.id });
       }
     }
-    this.coins += 3 + Meta.lvl('kolipara') * 2;
-    this.score += Math.round(150 * p.greed);
-    this.chestAnim = { t: 0, rewards };
+    this.coins += (bossReward ? 13 : 3) + Meta.lvl('kolipara') * 2;
+    this.score += Math.round((bossReward ? 400 : 150) * p.greed);
+    this.chestAnim = { t: 0, rewards, boss: !!bossReward };
     this.state = 'chest';
     Sfx.play('chest');
   },
@@ -518,6 +591,23 @@ const Game = {
     }
 
     UI.drawHUD(ctx);
+
+    // boss giriş sineması: letterbox bantları + dev isim
+    if (this.bossIntro && this.state === 'play') {
+      const t = this.bossIntro.t;
+      const k = Math.min(1, t / 0.3, Math.max(0, (2.2 - t) / 0.4));
+      const bh = Math.round(k * 24);
+      ctx.fillStyle = COL.outline;
+      ctx.fillRect(0, 0, 480, bh);
+      ctx.fillRect(0, 270 - bh, 480, bh);
+      if (k > 0.5) {
+        const shakeX = t < 0.6 ? rand(-2, 2) : 0;
+        drawText(ctx, this.bossIntro.name, 240 + shakeX, 116, COL.red,
+          { align: 'center', scale: 3, shadow: COL.outline, alpha: Math.min(1, k) });
+        drawText(ctx, 'GELDİ!', 240, 146, COL.yellow,
+          { align: 'center', scale: 1, shadow: COL.outline, alpha: (0.6 + Math.sin(t * 10) * 0.4) * k });
+      }
+    }
 
     if (this.state === 'levelup') UI.drawLevelUp(ctx);
     else if (this.state === 'chest') UI.drawChest(ctx);

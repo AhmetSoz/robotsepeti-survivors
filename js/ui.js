@@ -137,7 +137,7 @@ const UI = {
     drawText(ctx, Meta.bank + ' PARA', 18, 9, COL.gold, { shadow: COL.outline });
 
     drawText(ctx, 'WASD: HAREKET · SPACE: YETENEK · ENTER: SEÇ', 240, 234, COL.greyDark, { align: 'center' });
-    drawText(ctx, 'ROBOTSEPETİ EKİP OYUNU · V3.0', 240, 250, COL.navy, { align: 'center' });
+    drawText(ctx, 'ROBOTSEPETİ EKİP OYUNU · V4.0', 240, 250, COL.navy, { align: 'center' });
   },
 
   // ── DÜKKAN: kalıcı yükseltmeler ──
@@ -286,6 +286,32 @@ const UI = {
     // görev paneli (sol üst, can barının altında)
     Missions.draw(ctx);
 
+    // mini radar: boss / elit müşteri / kargo kolisi konumları
+    {
+      const rx = 6, ry = 64, rw = 46, rh = 34;
+      ctx.fillStyle = 'rgba(24,20,37,0.55)';
+      ctx.fillRect(rx, ry, rw, rh);
+      ctx.strokeStyle = COL.navy; ctx.lineWidth = 1;
+      ctx.strokeRect(rx + 0.5, ry + 0.5, rw - 1, rh - 1);
+      const cx = rx + rw / 2, cy = ry + rh / 2;
+      const scl = 0.05;   // 1 radar pikseli ≈ 20 dünya pikseli
+      const dot = (wx, wy, col, sz, blink) => {
+        if (blink && ((Game.uiT * 5) | 0) % 2) return;
+        const dx = clamp((wx - p.x) * scl, -rw / 2 + 2, rw / 2 - 2);
+        const dy = clamp((wy - p.y) * scl, -rh / 2 + 2, rh / 2 - 2);
+        ctx.fillStyle = col;
+        ctx.fillRect(Math.round(cx + dx) - (sz >> 1), Math.round(cy + dy) - (sz >> 1), sz, sz);
+      };
+      for (const pk of Game.pickups) if (pk.type === 'chest') dot(pk.x, pk.y, COL.gold, 2);
+      for (const e of Game.enemies) {
+        if (e.type.boss) dot(e.x, e.y, COL.red, 3, true);
+        else if (e.type.elite) dot(e.x, e.y, COL.orange, 2);
+      }
+      // oyuncu: merkezde
+      ctx.fillStyle = COL.white;
+      ctx.fillRect(cx - 1, cy - 1, 2, 2);
+    }
+
     // kombo sayacı (sağ orta): büyüdükçe renklenir ve titrer
     if (Game.combo >= 5) {
       const c = Game.combo;
@@ -351,17 +377,33 @@ const UI = {
       drawText(ctx, 'SPACE', bx + 15, by - 9, ready ? COL.yellow : COL.greyDark, { align: 'center' });
     }
 
-    // boss can barı (en son gelen bossun adıyla)
+    // boss can barı (en son gelen bossun adıyla, öfke fazı işaretli)
     if (Game.bossAlive) {
       let boss = null;
       for (let i = Game.enemies.length - 1; i >= 0; i--) {
         if (Game.enemies[i].type.boss) { boss = Game.enemies[i]; break; }
       }
       if (boss) {
-        ctx.fillStyle = COL.outline; ctx.fillRect(140, 254, 200, 8);
-        ctx.fillStyle = COL.purpleDark; ctx.fillRect(141, 255, 198, 6);
-        ctx.fillStyle = COL.purple; ctx.fillRect(141, 255, 198 * clamp(boss.hp / boss.maxHp, 0, 1), 6);
-        drawText(ctx, boss.type.name, 240, 244, COL.purple, { align: 'center', shadow: COL.outline });
+        const hpK = clamp(boss.hp / boss.maxHp, 0, 1);
+        const col = boss.enraged ? COL.red : COL.purple;
+        const colDark = boss.enraged ? COL.redDark : COL.purpleDark;
+        // çerçeveli bar
+        ctx.fillStyle = COL.outline; ctx.fillRect(136, 252, 208, 12);
+        ctx.strokeStyle = boss.enraged ? COL.red : COL.greyDark; ctx.lineWidth = 1;
+        ctx.strokeRect(136.5, 252.5, 207, 11);
+        ctx.fillStyle = colDark; ctx.fillRect(138, 254, 204, 8);
+        ctx.fillStyle = col; ctx.fillRect(138, 254, Math.round(204 * hpK), 8);
+        ctx.fillStyle = boss.enraged ? COL.pink : COL.purple;
+        ctx.fillRect(138, 254, Math.round(204 * hpK), 2);
+        // segment çizgileri (her %25)
+        ctx.fillStyle = COL.outline;
+        for (let s = 1; s < 4; s++) ctx.fillRect(138 + s * 51, 254, 1, 8);
+        // öfke eşiği işareti (%60)
+        ctx.fillStyle = COL.orange;
+        ctx.fillRect(138 + Math.round(204 * 0.6), 251, 1, 3);
+        const label = boss.type.name + (boss.enraged ? ' · ÖFKELİ!' : '');
+        drawText(ctx, label, 240, 242, boss.enraged ? COL.red : COL.purple,
+          { align: 'center', shadow: COL.outline });
       }
     }
 
@@ -444,6 +486,10 @@ const UI = {
     if (a.evolve) {
       const flash = 0.7 + Math.sin(Game.uiT * 8) * 0.3;
       drawText(ctx, 'EVRİM!', 240, 30, COL.gold, { align: 'center', scale: 3, shadow: COL.outline, alpha: flash });
+    } else if (a.boss) {
+      const flash = 0.7 + Math.sin(Game.uiT * 8) * 0.3;
+      drawText(ctx, 'BOSS ÖDÜLÜ!', 240, 30, COL.gold, { align: 'center', scale: 2, shadow: COL.outline, alpha: flash });
+      drawText(ctx, 'BÜYÜK KARGO: BOL GELİŞTİRME + BOL PARA', 240, 48, COL.greyDark, { align: 'center' });
     } else {
       drawText(ctx, 'KARGO GELDİ!', 240, 30, COL.orange, { align: 'center', scale: 2, shadow: COL.outline });
       drawText(ctx, 'KOLİ: BEDAVA RASTGELE GELİŞTİRME + PARA', 240, 48, COL.greyDark, { align: 'center' });

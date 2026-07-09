@@ -270,7 +270,7 @@ const SKILLS = {
   },
   berker: {
     name: 'SEVKİYAT YAĞMURU',
-    desc: 'Gökten koli yağar. Depo boşalıyor!',
+    desc: 'Baktığın yöne koli bombardımanı. Nişan sende!',
     lvlDesc: 'Koli sayısı ve hasar artar.',
     cd: 12,
     base: { n: 6, dmg: 20, splash: 22 },
@@ -382,6 +382,56 @@ const ENEMY_TYPES = {
       '.oHHHHHHHHo.'
     ]}
   },
+  nine: {
+    name: 'PAZARCI TEYZE',
+    hp: 90, dmg: 14, speed: 14, scale: 1.2, xp: 3, score: 30,
+    shirt: COL.purple, shade: COL.purpleDark, skin: COL.skinAlt,
+    minTime: 150, weight: 1.8, armor: 2, heavy: true,
+    overlay: { oy: 0, map: { H: COL.greyLight, o: COL.outline, B: COL.brownDark }, rows: [
+      '.oHHHHHHHHo.',
+      'oHHHHHHHHHHo',
+      'oHH......HHo',
+      '.oH......Ho.',
+      '............',
+      '............',
+      '............',
+      '............',
+      '.........BBB',
+      '.........BBB'
+    ]}
+  },
+  yildizci: {
+    name: 'BİR YILDIZCI',
+    hp: 26, dmg: 8, speed: 26, scale: 1.0, xp: 3, score: 24,
+    shirt: COL.gold, shade: COL.orangeDark, skin: COL.skin,
+    minTime: 210, weight: 1.6,
+    ranged: { range: 120, cd: 3.6, projSpd: 72, dmg: 8, spread: 3, spr: 'star' },
+    overlay: { oy: 0, map: { H: COL.hairDark, o: COL.outline, Y: COL.yellow }, rows: [
+      '..oHHHHHHo..',
+      '.oHHHHHHHHo.',
+      '............',
+      '............',
+      '............',
+      '............',
+      '............',
+      '............',
+      '.....Y......',
+      '....YYY.....',
+      '.....Y......'
+    ]}
+  },
+  gececi: {
+    name: 'GECE MÜŞTERİSİ',
+    hp: 24, dmg: 11, speed: 62, scale: 0.95, xp: 3, score: 28,
+    shirt: COL.navyDark, shade: COL.outline, skin: COL.greyLight,
+    minTime: 480, weight: 2.4, ghostly: true,
+    overlay: { oy: 0, map: { H: COL.navyDark, o: COL.outline, T: COL.teal }, rows: [
+      '..oHHHHHHo..',
+      '.oHHHHHHHHo.',
+      '.oHH....HHo.',
+      '....T..T....'
+    ]}
+  },
   vip: {
     name: 'VIP MÜŞTERİ',
     hp: 130, dmg: 14, speed: 19, scale: 1.25, xp: 5, score: 60,
@@ -417,45 +467,28 @@ const ENEMY_TYPES = {
     name: 'TOPTANCI',
     hp: 950, dmg: 24, speed: 15, scale: 2.4, xp: 40, score: 1500,
     shirt: COL.purpleDark, shade: COL.hairDark, skin: COL.skinAlt,
-    boss: true,
+    boss: true, big: true, sprScale: 1.6,
     charge: { cd: 8, wind: 0.7, spd: 185, dur: 0.55 },
     summon: { cd: 6, id: 'aceleci', n: 3 },
-    overlay: { oy: 0, map: { G: COL.gold }, rows: [
-      '..G..GG..G..',
-      '..GGGGGGGG..'
-    ]}
+    lob: { cd: 5.5, n: 2, dmg: 16, r: 24, warn: 0.9 }
   },
   karaborsaci: {
     name: 'KARABORSACI',
     hp: 1500, dmg: 20, speed: 13, scale: 2.1, xp: 50, score: 2500,
     shirt: COL.hairDark, shade: COL.outline, skin: COL.skinAlt,
-    boss: true,
+    boss: true, big: true, sprScale: 1.55,
     tele: { cd: 5, burst: 10, projSpd: 78, dmg: 11 },
-    overlay: { oy: 0, map: { H: COL.outline, S: COL.greyDark }, rows: [
-      '.HHHHHHHHHH.',
-      'HHHHHHHHHHHH',
-      '.SSSS..SSSS.'
-    ]}
+    rain: { cd: 7, n: 8, dmg: 9, r: 14, warn: 0.8 }
   },
   patron: {
     name: 'BÜYÜK PATRON',
     hp: 2600, dmg: 28, speed: 14, scale: 2.7, xp: 80, score: 4000,
     shirt: COL.outline, shade: COL.hairDark, skin: COL.skin,
-    boss: true, patron: true,
+    boss: true, patron: true, big: true, sprScale: 1.85,
     charge: { cd: 6, wind: 0.7, spd: 200, dur: 0.55 },
     tele: { cd: 7, burst: 12, projSpd: 82, dmg: 12 },
     summon: { cd: 8, id: 'kurye', n: 2 },
-    overlay: { oy: 0, map: { G: COL.gold, H: COL.grey }, rows: [
-      '..G.GGGG.G..',
-      '..GGGGGGGG..',
-      '.H........H.',
-      '............',
-      '............',
-      '............',
-      '............',
-      '.....GG.....',
-      '.....GG.....'
-    ]}
+    slam: { cd: 9, wind: 0.8, dmg: 14, maxR: 95 }
   }
 };
 

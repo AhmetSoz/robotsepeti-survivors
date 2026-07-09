@@ -60,7 +60,7 @@
         if (params.get('sklvl')) Game.player.skill.lvl = parseInt(params.get('sklvl'), 10);
         for (let i = 0; i < 26; i++) {
           const a = rand(TAU), r = rand(50, 210);
-          spawnEnemy(pick(['aceleci', 'kararsiz', 'pazarlikci', 'iadeci']),
+          spawnEnemy(pick(['aceleci', 'kararsiz', 'pazarlikci', 'iadeci', 'nine', 'yildizci']),
             Math.cos(a) * r, Math.sin(a) * r);
         }
         spawnEnemy('kizgin', 90, -50);
@@ -73,6 +73,23 @@
         addPickup('bomb', 30, -60);
         addPickup('shield', -90, 20);
         addPickup('turbo', 100, -20);
+      }
+      // px/py: oyuncuyu ışınla (bölge ekran görüntüleri için)
+      if (params.get('px') || params.get('py')) {
+        const px = parseFloat(params.get('px') || '0'), py = parseFloat(params.get('py') || '0');
+        Game.player.x = px; Game.player.y = py;
+        Game.camX = px; Game.camY = py;
+        for (const e of Game.enemies) { e.x += px; e.y += py; }
+        for (const pk of Game.pickups) { pk.x += px; pk.y += py; }
+      }
+      // boss: anında boss testi (?boss=toptanci)
+      if (params.get('boss') && ENEMY_TYPES[params.get('boss')]) {
+        const bid = params.get('boss');
+        const b = spawnEnemy(bid, Game.player.x + 70, Game.player.y - 30);
+        b.spawnT = 0;
+        Game.bossAlive = true;
+        Game.bossIntro = { t: 0, name: ENEMY_TYPES[bid].name };
+        if (params.get('bosshp')) b.hp = b.maxHp * parseFloat(params.get('bosshp'));
       }
       // sim: N saniyelik oyunu önceden işlet (deterministik ekran görüntüsü)
       const sim = parseFloat(params.get('sim') || '0');
