@@ -63,6 +63,15 @@ function recalcStats(p) {
   if (p.charId === 'ali') p.dodge = 0.12;
   if (p.charId === 'bekir') { p.stunChance = 0.1; p.xpGain = 1.1; }
   if (p.charId === 'erkan') p.greed += 0.25;
+  // giyili kostümün bonusu
+  const cs = Meta.costumeDef();
+  if (cs.spd) p.spd *= 1 + cs.spd;
+  if (cs.might) p.might *= 1 + cs.might;
+  if (cs.magnet) p.magnetR *= 1 + cs.magnet;
+  if (cs.armor) p.armor += cs.armor;
+  if (cs.dodge) p.dodge += cs.dodge;
+  if (cs.greed) p.greed += cs.greed;
+  if (cs.xp) p.xpGain += cs.xp;
 }
 
 function weaponStats(p, w) {
@@ -742,6 +751,12 @@ function updateWeaponEntities(dt) {
       }
     }
     pr.x += pr.vx * dt; pr.y += pr.vy * dt;
+    // uçuş izi: zımba kıvılcım, mail beyaz duman bırakır
+    if (Math.random() < (pr.type === 'mail' ? 0.35 : 0.2)) {
+      addPart({ x: pr.x, y: pr.y, vx: rand(-5, 5), vy: rand(-5, 5), dur: 0.25,
+        type: pr.type === 'mail' ? 'puff' : 'spark',
+        col: pr.type === 'mail' ? COL.white : COL.greyLight, size: 1 });
+    }
     if (pr.t > 3) { Game.projs.splice(i, 1); continue; }
     let dead = false;
     for (const e of Game.enemies) {
@@ -783,6 +798,7 @@ function spawnEnemy(typeId, x, y) {
     sumCd: t.summon ? t.summon.cd * 0.7 : 0,
     lobCd: t.lob ? t.lob.cd * 0.6 : 0,
     rainCd: t.rain ? t.rain.cd * 0.6 : 0,
+    sgCd: t.shotgun ? t.shotgun.cd * 0.6 : 0,
     slamCd: t.slam ? t.slam.cd * 0.5 : 0,
     slamWindT: 0, enraged: false
   };
@@ -835,7 +851,7 @@ function killEnemy(e) {
   const idx = Game.enemies.indexOf(e);
   if (idx < 0) return;
   Game.enemies.splice(idx, 1);
-  Game.score += Math.round(e.type.score * Game.player.greed);
+  Game.score += Math.round(e.type.score * Game.player.greed * Game.scoreMul());
 
   // kırılabilir nesne: ödül düşür, kıymık saç
   if (e.type.breakable) {
@@ -1043,6 +1059,21 @@ function updateEnemies(dt) {
         if (e.type.summon && (!e.type.patron || e.hp < e.maxHp * 0.3)) {
           e.sumCd -= dt;
           if (e.sumCd <= 0) { e.sumCd = e.type.summon.cd; bossSummon(e); }
+        }
+        // pompalı boss: oyuncuya doğru yelpaze mermi
+        if (e.type.shotgun) {
+          e.sgCd -= dt;
+          if (e.sgCd <= 0 && d < 220) {
+            const cfg = e.type.shotgun;
+            e.sgCd = cfg.cd;
+            const base = Math.atan2(p.y - 8 - e.y, p.x - e.x);
+            for (let i = 0; i < cfg.n; i++) {
+              const a = base + (i - (cfg.n - 1) / 2) * (cfg.spread / (cfg.n - 1));
+              Game.eShots.push({ x: e.x, y: e.y - 10, vx: Math.cos(a) * cfg.projSpd,
+                vy: Math.sin(a) * cfg.projSpd, dmg: cfg.dmg * dmgMul, t: 0 });
+            }
+            Sfx.play('box');
+          }
         }
         // toptancı: palet fırlatma (yer hedefli telegraf)
         if (e.type.lob && d < 260) {
@@ -1497,11 +1528,16 @@ function drawPlayField(ctx) {
     ctx.restore();
   }
 
-  // supleks / patlama şok halkaları
+  // supleks / patlama şok halkaları (additive parlama ile)
   for (const sh of Game.shocks) {
     const [sx, sy] = W2S(sh.x, sh.y);
     const pr = sh.r * Math.min(1, sh.t / 0.22);
     ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = (1 - sh.t / 0.3) * 0.35;
+    ctx.fillStyle = sh.col || COL.red;
+    ctx.beginPath(); ctx.ellipse(sx, sy, pr, pr * 0.6, 0, 0, TAU); ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1 - sh.t / 0.3;
     ctx.strokeStyle = COL.white; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.ellipse(sx, sy, pr, pr * 0.6, 0, 0, TAU); ctx.stroke();
@@ -1809,17 +1845,18 @@ function drawPlayerSprite(ctx) {
   const sx = Math.round(p.x - Game.camX + 240);
   const sy = Math.round(p.y - Game.camY + 135);
 
-  // seviye aurası: SV10+ hafif, SV20+ güçlü halka
+  // seviye aurası: SV10+ hafif, SV20+ güçlü, SV30+ altın efsane halkası
   if (Game.level >= 10) {
     const strong = Game.level >= 20;
+    const legend = Game.level >= 30;
     ctx.save();
     ctx.globalAlpha = (strong ? 0.3 : 0.16) + Math.sin(Game.time * 4) * 0.06;
-    ctx.strokeStyle = p.def.color; ctx.lineWidth = 1;
+    ctx.strokeStyle = legend ? COL.gold : p.def.color; ctx.lineWidth = 1;
     const ar = 12 + Math.sin(Game.time * 3) * 1.5;
     ctx.beginPath(); ctx.ellipse(sx, sy, ar, ar * 0.45, 0, 0, TAU); ctx.stroke();
     if (strong) {
       ctx.globalAlpha *= 0.7;
-      ctx.strokeStyle = COL.white;
+      ctx.strokeStyle = legend ? COL.yellow : COL.white;
       ctx.beginPath(); ctx.ellipse(sx, sy, ar + 3, (ar + 3) * 0.45, 0, 0, TAU); ctx.stroke();
     }
     ctx.restore();
@@ -1845,13 +1882,29 @@ function drawPlayerSprite(ctx) {
   const bob = p.moving ? 0 : Math.round(Math.sin(Game.time * 3) * 0.8);
   const py = sy + 1 + bob;
 
+  // evrimleşmiş silah: karakterden taşan güç halesi
+  if (p.weapons.some(w => w.evolved)) {
+    const spr0 = SPR.chars[p.charId];
+    const gv = p.flip ? spr0.frames[frame].wf : spr0.frames[frame].wn;
+    ctx.save();
+    ctx.globalAlpha = 0.1 + Math.sin(Game.time * 6) * 0.06;
+    for (const [gx, gy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+      ctx.drawImage(gv, Math.round(sx - spr0.w / 2 + gx), Math.round(py - spr0.h + gy));
+    }
+    ctx.restore();
+  }
+
   // ── gövde + baret: yöne eğilme ve dönüş büzüşmesiyle çizilir ──
   const turnK = p.turnT > 0 ? Math.sin((p.turnT / 0.12) * Math.PI) : 0;
   ctx.save();
   ctx.translate(sx, py);
   if (Math.abs(p.lean) > 0.004) ctx.rotate(p.lean);
   if (turnK > 0.01) ctx.scale(1 - turnK * 0.35, 1);
+  // hayalet pelerini: yarı saydam gövde
+  const cosId = Meta.costume();
+  if (cosId === 'hayalet') ctx.globalAlpha = 0.75;
   drawSpr(ctx, SPR.chars[p.charId], frame, 0, 0, { flip: p.flip, white: p.hurtFlash > 0.15 });
+  if (cosId === 'hayalet') ctx.globalAlpha = 1;
   const top = -17;   // sprite üst kenarı (yerel koordinat)
 
   // iş güvenliği: sarı baret (SV3+ ışıklı)
@@ -1873,6 +1926,56 @@ function drawPlayerSprite(ctx) {
     ctx.fillStyle = COL.grey; ctx.fillRect(ax, ay - 2, 2, 5);
     ctx.fillStyle = COL.teal; ctx.fillRect(ax, ay, 1, 1);
     if (p.items['robotkol'] >= 3) { ctx.fillStyle = COL.greyLight; ctx.fillRect(ax - 1, ay + 4, 4, 2); }
+  }
+  // mekanik klavye: sırtta mini klavye
+  if (p.items['klavye']) {
+    const bside = p.flip ? 1 : -1;   // sırt tarafı
+    ctx.fillStyle = COL.greyDark; ctx.fillRect(bside * 7 - 1, -12, 3, 6);
+    ctx.fillStyle = COL.greyLight;
+    ctx.fillRect(bside * 7, -11, 1, 1); ctx.fillRect(bside * 7, -9, 1, 1); ctx.fillRect(bside * 7, -7, 1, 1);
+  }
+  // neodyum mıknatıs: kemerde kırmızı U
+  if (p.items['miknatis']) {
+    const mside = p.flip ? -1 : 1;
+    ctx.fillStyle = COL.red;
+    ctx.fillRect(mside * 5, -5, 1, 3); ctx.fillRect(mside * 5 + 2, -5, 1, 3);
+    ctx.fillRect(mside * 5, -3, 3, 1);
+    ctx.fillStyle = COL.white;
+    ctx.fillRect(mside * 5, -5, 1, 1); ctx.fillRect(mside * 5 + 2, -5, 1, 1);
+  }
+
+  // ── kostüm görselleri (dükkândan giyilir) ──
+  if (cosId === 'sapka') {
+    // parti şapkası
+    ctx.fillStyle = COL.red;    ctx.fillRect(-2, top - 3, 4, 3);
+    ctx.fillStyle = COL.teal;   ctx.fillRect(-1, top - 4, 2, 1);
+    ctx.fillStyle = COL.yellow; ctx.fillRect(-1, top - 6, 2, 2);
+  } else if (cosId === 'bandana') {
+    // güreş bandanası + kuyruk
+    ctx.fillStyle = COL.red;
+    ctx.fillRect(-5, top + 3, 10, 2);
+    ctx.fillRect(p.flip ? 5 : -7, top + 4, 2, 3);
+  } else if (cosId === 'kedi') {
+    // kedi kulakları
+    ctx.fillStyle = COL.hairDark;
+    ctx.fillRect(-5, top - 2, 3, 3); ctx.fillRect(2, top - 2, 3, 3);
+    ctx.fillStyle = COL.pink;
+    ctx.fillRect(-4, top - 1, 1, 1); ctx.fillRect(3, top - 1, 1, 1);
+  } else if (cosId === 'yelek') {
+    // koruma yeleği: gövdeye reflektörlü yelek
+    ctx.fillStyle = 'rgba(24,20,37,0.5)';
+    ctx.fillRect(-5, -7, 10, 5);
+    ctx.fillStyle = COL.yellow;
+    ctx.fillRect(-5, -7, 1, 5); ctx.fillRect(4, -7, 1, 5);
+  } else if (cosId === 'esofman') {
+    // eşofman: yan şeritler
+    ctx.fillStyle = COL.white;
+    ctx.fillRect(-6, -7, 1, 6); ctx.fillRect(5, -7, 1, 6);
+  } else if (cosId === 'kral') {
+    // kral tacı
+    ctx.fillStyle = COL.gold;
+    ctx.fillRect(-4, top - 1, 8, 2);
+    ctx.fillRect(-4, top - 3, 1, 2); ctx.fillRect(-1, top - 3, 2, 2); ctx.fillRect(3, top - 3, 1, 2);
   }
   ctx.restore();
 
@@ -1898,6 +2001,15 @@ function drawPlayerSprite(ctx) {
   if (p.items['prim'] && Math.random() < 0.02 * p.items['prim']) {
     addPart({ x: p.x + rand(-6, 6), y: p.y - rand(10, 18), vx: 0, vy: -8,
       dur: 0.5, type: 'spark', col: COL.gold });
+  }
+  // hayalet pelerini: süzülen tüller
+  if (cosId === 'hayalet' && p.moving && Math.random() < 0.12) {
+    addPart({ x: p.x + rand(-4, 4), y: p.y - rand(2, 12), vx: rand(-6, 6), vy: -6,
+      dur: 0.6, type: 'puff', col: COL.greyLight, size: 2 });
+  }
+  // kral tacı: altın ışıltı
+  if (cosId === 'kral' && Math.random() < 0.04) {
+    addPart({ x: p.x + rand(-4, 4), y: p.y - 18, vx: 0, vy: -10, dur: 0.4, type: 'spark', col: COL.gold });
   }
   // Erkan'ın buharı: hafif ambiyans
   if (p.charId === 'erkan' && Math.random() < 0.03) {

@@ -16,6 +16,19 @@ const META_UPGRADES = {
 };
 const META_ORDER = ['can', 'guc', 'hiz', 'cekim', 'yetenek', 'kolipara', 'w_zimba', 'w_mail', 'w_mop'];
 
+// ─── Kostümler: satın al + seç; bonus verir, karakterde görünür ───
+const COSTUMES = {
+  none:    { name: 'STANDART ÜNİFORMA', desc: 'Klasik Robotsepeti stili.',      cost: 0 },
+  sapka:   { name: 'PARTİ ŞAPKASI',     desc: '+%10 tecrübe',                   cost: 40,  xp: 0.10 },
+  esofman: { name: 'EŞOFMAN TAKIMI',    desc: '+%5 hareket hızı',               cost: 60,  spd: 0.05 },
+  bandana: { name: 'GÜREŞ BANDANASI',   desc: '+%6 hasar',                      cost: 90,  might: 0.06 },
+  kedi:    { name: 'KEDİ KULAKLIĞI',    desc: '+%20 toplama alanı',             cost: 70,  magnet: 0.20 },
+  yelek:   { name: 'KORUMA YELEĞİ',     desc: '+1 zırh',                        cost: 110, armor: 1 },
+  hayalet: { name: 'HAYALET PELERİNİ',  desc: '+%5 kaçınma',                    cost: 140, dodge: 0.05 },
+  kral:    { name: 'KRAL TACI',         desc: '+%15 para ve skor',              cost: 220, greed: 0.15 }
+};
+const COSTUME_ORDER = ['none', 'sapka', 'esofman', 'bandana', 'kedi', 'yelek', 'hayalet', 'kral'];
+
 const Meta = {
   data: {},
   bank: 0,
@@ -65,6 +78,29 @@ const Meta = {
     for (const id in META_UPGRADES) {
       if (META_UPGRADES[id].weapon === wid) return this.lvl(id) > 0;
     }
+    return true;
+  },
+
+  // ── kostümler ──
+  costume() { return this.data.costume || 'none'; },
+  costumeDef() { return COSTUMES[this.costume()] || COSTUMES.none; },
+  ownsCostume(id) { return id === 'none' || !!(this.data.costumes && this.data.costumes[id]); },
+
+  // sahip değilsen satın alır, sahipsen seçer; başarı durumunu döner
+  buyOrWear(id) {
+    const c = COSTUMES[id];
+    if (!c) return false;
+    if (this.ownsCostume(id)) {
+      this.data.costume = id;
+      this.save();
+      return true;
+    }
+    if (this.bank < c.cost) return false;
+    this.bank -= c.cost;
+    if (!this.data.costumes) this.data.costumes = {};
+    this.data.costumes[id] = 1;
+    this.data.costume = id;
+    this.save();
     return true;
   }
 };

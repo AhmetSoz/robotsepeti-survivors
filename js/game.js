@@ -1,6 +1,8 @@
 'use strict';
 // ─── Oyun akışı ve yönetmen (director) ───────────────────────
-const WIN_TIME = 900; // 15 dakika = paydos
+// Oyun SONSUZ: kazanma yok. 15. dakikada "fazla mesai" başlar,
+// skor çarpanı artar, bosslar döngüyle geri gelir, zorluk büyümeye devam eder.
+const WIN_TIME = 900; // 15 dakika = fazla mesai eşiği
 
 // ─── Ortak skor tablosu (Vercel + Upstash Redis) ─────────────
 // http(s) üzerinden açıldığında skorlar buluttaki API'ye gider;
@@ -28,6 +30,7 @@ const Game = {
   kickX: 0, kickY: 0,
   pickStreak: 0, pickStreakT: 0,
   lastHurtT: 0, lullT: 0, crateT: 8, tickN: 0, banked: false,
+  overtime: false, nextBossT: 0, bossCycleIdx: 0,
   levelOptions: [], levelIdx: 0,
   chestAnim: null,
   nameInput: '', nameDone: false,
@@ -55,6 +58,7 @@ const Game = {
     this.kickX = 0; this.kickY = 0;
     this.pickStreak = 0; this.pickStreakT = 0;
     this.lastHurtT = 0; this.lullT = 0; this.crateT = 6; this.tickN = 0; this.banked = false;
+    this.overtime = false; this.nextBossT = WIN_TIME + 90; this.bossCycleIdx = 0;
     Missions.reset();
     this.eliteT = charId === 'berker' ? 48 : 60;
     this.banner = { txt: 'MESAİ BAŞLADI! MÜŞTERİLER GELİYOR!', t: 0 };
@@ -66,7 +70,13 @@ const Game = {
   xpNeeded(l) { return 8 + (l - 1) * 7 + Math.max(0, l - 8) * 6; },
 
   displayScore() {
-    return this.score + Math.floor(this.time * 8) + (this.level - 1) * 120 + (this.won ? 2500 : 0);
+    // fazla mesaiye ulaşmak bonus verir; kazanma yok, oyun sonsuz
+    return this.score + Math.floor(this.time * 8) + (this.level - 1) * 120 + (this.time >= WIN_TIME ? 2500 : 0);
+  },
+
+  // fazla mesaide skor çarpanı: her 15 dakikada +1x
+  scoreMul() {
+    return 1 + Math.floor(this.time / WIN_TIME);
   },
 
   // ── güncelleme ──
@@ -173,12 +183,13 @@ const Game = {
     const kd = Math.exp(-10 * dt);
     this.kickX *= kd; this.kickY *= kd;
 
-    // paydos!
-    if (this.time >= WIN_TIME && !this.won) {
-      this.won = true;
-      this.state = 'over';
-      this.nameInput = this.player.def.name;
-      this.bankCoins();
+    // fazla mesai! (kazanma yok, oyun sonsuz devam eder)
+    if (this.time >= WIN_TIME && !this.overtime) {
+      this.overtime = true;
+      this.banner = { txt: 'PAYDOS YOK! FAZLA MESAİ BAŞLADI: x2 SKOR!', t: 0 };
+      const p = this.player;
+      p.hp = Math.min(p.maxHp, p.hp + Math.round(p.maxHp * 0.3));
+      this.flashT = 0.3; this.flashCol = '254,231,97';
       Sfx.play('win');
     }
   },
@@ -279,13 +290,25 @@ const Game = {
       }
     }
 
-    // boss takvimi
+    // boss takvimi (ilk üç sabit)
     if (this.bossIdx < BOSS_SCHEDULE.length && t >= BOSS_SCHEDULE[this.bossIdx].t) {
       const b = BOSS_SCHEDULE[this.bossIdx++];
       const boss = this.spawnAt(b.id);
       this.bossAlive = true;
       this.banner = { txt: b.banner, t: 0 };
       this.bossIntro = { t: 0, name: ENEMY_TYPES[b.id].name };
+      this.shocks.push({ x: boss.x, y: boss.y - 8, r: 70, t: 0, col: COL.purple });
+      Sfx.play('boss');
+      this.shake = Math.max(this.shake, 4);
+    }
+    // fazla mesai boss döngüsü: sırayla, giderek güçlenerek geri gelirler
+    if (t >= this.nextBossT) {
+      this.nextBossT = t + BOSS_CYCLE_GAP;
+      const id = BOSS_POOL[this.bossCycleIdx++ % BOSS_POOL.length];
+      const boss = this.spawnAt(id);
+      this.bossAlive = true;
+      this.banner = { txt: ENEMY_TYPES[id].name + ' GERİ DÖNDÜ! DAHA DA ÖFKELİ!', t: 0 };
+      this.bossIntro = { t: 0, name: ENEMY_TYPES[id].name };
       this.shocks.push({ x: boss.x, y: boss.y - 8, r: 70, t: 0, col: COL.purple });
       Sfx.play('boss');
       this.shake = Math.max(this.shake, 4);

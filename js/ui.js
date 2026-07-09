@@ -47,22 +47,27 @@ const UI = {
       if (w.x > 500) Game.bgWalkers.splice(i, 1);
     }
 
-    const items = 4;
+    const items = 5;
     this.navVertical(items);
     const hit = this.titleMenuHit();
     if (hit >= 0) Game.menuIdx = hit;
     if (Input.confirm() || (Input.mouse.clicked && hit >= 0)) {
       Sfx.play('select');
-      if (Game.menuIdx === 0) { Game.state = 'select'; Game.selIdx = 0; }
+      if (Game.menuIdx === 0) {
+        // mobilde oyuna girerken otomatik tam ekran (uygulama hissi)
+        if (Input.touchMode) goFullscreen();
+        Game.state = 'select'; Game.selIdx = 0;
+      }
       else if (Game.menuIdx === 1) { Game.state = 'shop'; Game.menuIdx = 0; }
       else if (Game.menuIdx === 2) { Game.state = 'scores'; Game.fetchScores(); }
+      else if (Game.menuIdx === 3) { isFullscreen() ? exitFullscreen() : goFullscreen(); }
       else { Sfx.setMute(!Sfx.muted); }
     }
   },
 
   titleMenuHit() {
-    for (let i = 0; i < 4; i++) {
-      if (Input.mouseIn(160, 168 + i * 16 - 4, 160, 14)) return i;
+    for (let i = 0; i < 5; i++) {
+      if (Input.mouseIn(160, 166 + i * 15 - 4, 160, 13)) return i;
     }
     return -1;
   },
@@ -122,10 +127,12 @@ const UI = {
     }
 
     // menü
-    const labels = ['BAŞLA', 'DÜKKAN', 'SKOR TABLOSU', 'SES: ' + (Sfx.muted ? 'KAPALI' : 'AÇIK')];
+    const labels = ['BAŞLA', 'DÜKKAN', 'SKOR TABLOSU',
+      'TAM EKRAN: ' + (isFullscreen() ? 'AÇIK' : 'KAPALI'),
+      'SES: ' + (Sfx.muted ? 'KAPALI' : 'AÇIK')];
     for (let i = 0; i < labels.length; i++) {
       const sel = Game.menuIdx === i;
-      const y = 168 + i * 16;
+      const y = 166 + i * 15;
       if (sel) {
         drawText(ctx, '>', 240 - textW(labels[i]) / 2 - 14, y, COL.yellow, { shadow: COL.outline });
       }
@@ -136,60 +143,107 @@ const UI = {
     ctx.drawImage(SPR.coin, 8, 8);
     drawText(ctx, Meta.bank + ' PARA', 18, 9, COL.gold, { shadow: COL.outline });
 
-    drawText(ctx, 'WASD: HAREKET · SPACE: YETENEK · ENTER: SEÇ', 240, 234, COL.greyDark, { align: 'center' });
+    drawText(ctx, Input.touchMode ? 'DOKUN: HAREKET · SAĞ ALT: YETENEK'
+      : 'WASD: HAREKET · SPACE: YETENEK · ENTER: SEÇ', 240, 242, COL.greyDark, { align: 'center' });
     drawText(ctx, 'ROBOTSEPETİ EKİP OYUNU · V4.0', 240, 250, COL.navy, { align: 'center' });
   },
 
   // ── DÜKKAN: kalıcı yükseltmeler ──
+  shopTab: 0,   // 0: yükseltmeler, 1: kostümler
+
   updateShop() {
     if (Input.back()) { Game.state = 'title'; Game.menuIdx = 0; return; }
-    this.navVertical(META_ORDER.length);
-    for (let i = 0; i < META_ORDER.length; i++) {
-      if (Input.mouseIn(40, 44 + i * 21, 400, 19)) {
-        Game.menuIdx = i;
-        if (Input.mouse.clicked && Meta.buy(META_ORDER[i])) Sfx.play('chest');
-        else if (Input.mouse.clicked) Sfx.play('hurt');
+    // sekme değiştir: sol/sağ ya da sekme başlığına tıkla
+    const rows = this.shopTab === 0 ? META_ORDER : COSTUME_ORDER;
+    if (Input.pressed['ArrowLeft'] || Input.pressed['KeyA'] ||
+        Input.pressed['ArrowRight'] || Input.pressed['KeyD']) {
+      this.shopTab = 1 - this.shopTab; Game.menuIdx = 0; Sfx.play('click'); return;
+    }
+    for (let tb = 0; tb < 2; tb++) {
+      if (Input.mouse.clicked && Input.mouseIn(140 + tb * 110, 24, 100, 14) && this.shopTab !== tb) {
+        this.shopTab = tb; Game.menuIdx = 0; Sfx.play('click'); return;
       }
     }
-    if (Input.confirm()) {
-      if (Meta.buy(META_ORDER[Game.menuIdx])) Sfx.play('chest');
-      else Sfx.play('hurt');
+    this.navVertical(rows.length);
+    const act = id => {
+      const ok = this.shopTab === 0 ? Meta.buy(id) : Meta.buyOrWear(id);
+      Sfx.play(ok ? 'chest' : 'hurt');
+    };
+    for (let i = 0; i < rows.length; i++) {
+      if (Input.mouseIn(40, 44 + i * 21, 400, 19)) {
+        Game.menuIdx = i;
+        if (Input.mouse.clicked) act(rows[i]);
+      }
     }
+    if (Input.confirm()) act(rows[Game.menuIdx]);
   },
 
   drawShop(ctx) {
     World.drawFloor(ctx, 777, 333, Game.uiT);
     this.dim(ctx, 0.72);
-    drawText(ctx, 'DÜKKAN', 240, 10, COL.orange, { align: 'center', scale: 2, shadow: COL.outline });
-    ctx.drawImage(SPR.coin, 380, 12);
-    drawText(ctx, Meta.bank, 390, 13, COL.gold, { shadow: COL.outline });
-    drawText(ctx, 'KOŞULARDA KAZANDIĞIN PARA BURADA BİRİKİR', 240, 30, COL.greyDark, { align: 'center' });
+    drawText(ctx, 'DÜKKAN', 240, 8, COL.orange, { align: 'center', scale: 2, shadow: COL.outline });
+    ctx.drawImage(SPR.coin, 380, 10);
+    drawText(ctx, Meta.bank, 390, 11, COL.gold, { shadow: COL.outline });
 
-    for (let i = 0; i < META_ORDER.length; i++) {
-      const id = META_ORDER[i];
-      const u = META_UPGRADES[id];
-      const lvl = Meta.lvl(id);
-      const maxed = lvl >= u.max;
-      const sel = Game.menuIdx === i;
-      const y = 44 + i * 21;
-      this.panel(ctx, 40, y, 400, 19, sel ? COL.yellow : COL.navy);
-      ctx.drawImage(SPR.icons[u.icon], 45, y + 3);
-      drawText(ctx, u.name, 62, y + 3, sel ? COL.yellow : COL.white);
-      drawText(ctx, u.desc, 62, y + 12, COL.grey);
-      // seviye kutucukları
-      for (let l = 0; l < u.max; l++) {
-        ctx.fillStyle = l < lvl ? (u.weapon ? COL.teal : COL.gold) : COL.navyDark;
-        ctx.fillRect(300 + l * 8, y + 7, 6, 5);
-      }
-      if (maxed) {
-        drawText(ctx, u.weapon ? 'AÇIK' : 'MAKS', 434, y + 6, COL.green, { align: 'right' });
-      } else {
-        const cost = Meta.cost(id);
-        const afford = Meta.bank >= cost;
-        drawText(ctx, cost + ' PARA', 434, y + 6, afford ? COL.gold : COL.redDark, { align: 'right' });
-      }
+    // sekmeler
+    const tabs = ['YÜKSELTMELER', 'KOSTÜMLER'];
+    for (let tb = 0; tb < 2; tb++) {
+      const on = this.shopTab === tb;
+      const x = 140 + tb * 110;
+      ctx.fillStyle = on ? 'rgba(254,174,52,0.15)' : 'rgba(38,43,68,0.8)';
+      ctx.fillRect(x, 24, 100, 14);
+      ctx.strokeStyle = on ? COL.gold : COL.navy;
+      ctx.strokeRect(x + 0.5, 24.5, 99, 13);
+      drawText(ctx, tabs[tb], x + 50, 28, on ? COL.gold : COL.greyDark, { align: 'center' });
     }
-    drawText(ctx, 'ENTER: SATIN AL · ESC: GERİ', 240, 250, COL.greyLight, { align: 'center' });
+
+    if (this.shopTab === 0) {
+      // ── yükseltmeler ──
+      for (let i = 0; i < META_ORDER.length; i++) {
+        const id = META_ORDER[i];
+        const u = META_UPGRADES[id];
+        const lvl = Meta.lvl(id);
+        const maxed = lvl >= u.max;
+        const sel = Game.menuIdx === i;
+        const y = 44 + i * 21;
+        this.panel(ctx, 40, y, 400, 19, sel ? COL.yellow : COL.navy);
+        ctx.drawImage(SPR.icons[u.icon], 45, y + 3);
+        drawText(ctx, u.name, 62, y + 2, sel ? COL.yellow : COL.white);
+        drawText(ctx, u.desc, 62, y + 11, COL.grey);
+        for (let l = 0; l < u.max; l++) {
+          ctx.fillStyle = l < lvl ? (u.weapon ? COL.teal : COL.gold) : COL.navyDark;
+          ctx.fillRect(300 + l * 8, y + 7, 6, 5);
+        }
+        if (maxed) {
+          drawText(ctx, u.weapon ? 'AÇIK' : 'MAKS', 434, y + 6, COL.green, { align: 'right' });
+        } else {
+          const cost = Meta.cost(id);
+          drawText(ctx, cost + ' PARA', 434, y + 6, Meta.bank >= cost ? COL.gold : COL.redDark, { align: 'right' });
+        }
+      }
+      drawText(ctx, 'ENTER: SATIN AL · A/D: SEKME · ESC: GERİ', 240, 250, COL.greyLight, { align: 'center' });
+    } else {
+      // ── kostümler ──
+      for (let i = 0; i < COSTUME_ORDER.length; i++) {
+        const id = COSTUME_ORDER[i];
+        const c = COSTUMES[id];
+        const owned = Meta.ownsCostume(id);
+        const worn = Meta.costume() === id;
+        const sel = Game.menuIdx === i;
+        const y = 44 + i * 21;
+        this.panel(ctx, 40, y, 400, 19, sel ? COL.yellow : (worn ? COL.teal : COL.navy));
+        drawText(ctx, c.name, 62, y + 2, sel ? COL.yellow : (worn ? COL.teal : COL.white));
+        drawText(ctx, c.desc, 62, y + 11, COL.grey);
+        if (worn) {
+          drawText(ctx, 'GİYİLİ', 434, y + 6, COL.green, { align: 'right' });
+        } else if (owned) {
+          drawText(ctx, 'GİY', 434, y + 6, COL.teal, { align: 'right' });
+        } else {
+          drawText(ctx, c.cost + ' PARA', 434, y + 6, Meta.bank >= c.cost ? COL.gold : COL.redDark, { align: 'right' });
+        }
+      }
+      drawText(ctx, 'ENTER: SATIN AL / GİY · A/D: SEKME · ESC: GERİ', 240, 250, COL.greyLight, { align: 'center' });
+    }
   },
 
   // ── KARAKTER SEÇİMİ ──
@@ -271,10 +325,12 @@ const UI = {
     drawText(ctx, p.def.name, 46, 27, p.def.color);
 
     // üst orta: süre
-    const tcol = Game.time > WIN_TIME - 60 ? COL.yellow : COL.white;
+    const tcol = Game.time >= WIN_TIME ? COL.gold : COL.white;
     drawText(ctx, fmtTime(Game.time), 240, 10, tcol, { align: 'center', scale: 2, shadow: COL.outline });
-    if (Game.time > WIN_TIME - 60 && Game.time < WIN_TIME) {
-      drawText(ctx, 'PAYDOSA AZ KALDI!', 240, 28, COL.yellow, { align: 'center' });
+    if (Game.time > WIN_TIME - 30 && Game.time < WIN_TIME) {
+      drawText(ctx, 'FAZLA MESAİYE AZ KALDI!', 240, 28, COL.yellow, { align: 'center' });
+    } else if (Game.time >= WIN_TIME && Game.time < WIN_TIME + 8) {
+      drawText(ctx, 'FAZLA MESAİ: x' + Game.scoreMul() + ' SKOR!', 240, 28, COL.gold, { align: 'center' });
     } else if (Game.hordeT <= 15 && Game.hordeT > 0) {
       // akın geri sayımı: ritim uyarısı
       const warn = Game.hordeT <= 5;
@@ -375,6 +431,30 @@ const UI = {
         ctx.fillRect(bx + 2 + i * 6, by + 32, 4, 2);
       }
       drawText(ctx, 'SPACE', bx + 15, by - 9, ready ? COL.yellow : COL.greyDark, { align: 'center' });
+    }
+
+    // ── dokunmatik HUD (mobil) ──
+    if (Input.touchMode) {
+      // duraklat butonu (sağ üst)
+      ctx.save();
+      ctx.globalAlpha = 0.5;
+      ctx.fillStyle = COL.navyDark; ctx.fillRect(452, 46, 22, 18);
+      ctx.fillStyle = COL.greyLight;
+      ctx.fillRect(458, 50, 3, 10); ctx.fillRect(464, 50, 3, 10);
+      ctx.restore();
+      // sanal joystick: dokunulan noktada taban + topuz
+      if (Input.joy.id !== -1) {
+        ctx.save();
+        ctx.globalAlpha = 0.25;
+        ctx.strokeStyle = COL.white; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(Input.joy.ox, Input.joy.oy, 22, 0, TAU); ctx.stroke();
+        ctx.globalAlpha = 0.4;
+        ctx.fillStyle = COL.white;
+        ctx.beginPath();
+        ctx.arc(Input.joy.ox + Input.joy.ax * 16, Input.joy.oy + Input.joy.ay * 16, 8, 0, TAU);
+        ctx.fill();
+        ctx.restore();
+      }
     }
 
     // boss can barı (en son gelen bossun adıyla, öfke fazı işaretli)
@@ -585,20 +665,23 @@ const UI = {
     }
     if (Input.pressed['Backspace']) Game.nameInput = Game.nameInput.slice(0, -1);
     if (Input.pressed['KeyR'] && Game.nameInput === '') { Game.startRun(Game.player.charId); return; }
-    if (Input.pressed['Enter'] || Input.pressed['NumpadEnter']) { Sfx.play('select'); Game.saveScore(); }
+    // mobil: dokunuş = kaydet (isim zaten karakter adıyla dolu gelir)
+    const touchSave = Input.touchMode && Input.mouse.clicked;
+    if (Input.pressed['Enter'] || Input.pressed['NumpadEnter'] || touchSave) { Sfx.play('select'); Game.saveScore(); }
   },
 
   drawOver(ctx) {
     this.dim(ctx, 0.72);
-    if (Game.won) {
-      drawText(ctx, 'PAYDOS!', 240, 34, COL.green, { align: 'center', scale: 3, shadow: COL.outline });
-      drawText(ctx, 'DÜKKANI KAPATTIN, MESAİ BİTTİ. HELAL!', 240, 62, COL.greyLight, { align: 'center' });
+    const legend = Game.time >= WIN_TIME;
+    if (legend) {
+      drawText(ctx, 'EFSANE MESAİ!', 240, 34, COL.gold, { align: 'center', scale: 3, shadow: COL.outline });
+      drawText(ctx, Math.floor(Game.time / 60) + ' DAKİKA DAYANDIN! DESTANLIK PERFORMANS!', 240, 62, COL.greyLight, { align: 'center' });
     } else {
       drawText(ctx, 'MESAİ FELAKETİ!', 240, 34, COL.red, { align: 'center', scale: 3, shadow: COL.outline });
       drawText(ctx, 'MÜŞTERİLER ' + Game.player.def.name + "'İ YEDİ BİTİRDİ...", 240, 62, COL.greyLight, { align: 'center' });
     }
 
-    this.panel(ctx, 130, 78, 220, 104, Game.won ? COL.green : COL.red);
+    this.panel(ctx, 130, 78, 220, 104, legend ? COL.gold : COL.red);
     const rows = [
       ['SÜRE', fmtTime(Game.time)],
       ['SEVİYE', Game.level],
@@ -611,8 +694,7 @@ const UI = {
     }
     drawText(ctx, 'SKOR', 142, 146, COL.gold);
     drawText(ctx, Game.displayScore(), 338, 142, COL.gold, { align: 'right', scale: 2, shadow: COL.outline });
-    if (Game.won) drawText(ctx, '+2500 PAYDOS BONUSU DAHİL', 240, 164, COL.green, { align: 'center' });
-    else drawText(ctx, '+' + Game.coins + ' PARA BANKAYA YATTI (DÜKKAN)', 240, 164, COL.gold, { align: 'center' });
+    drawText(ctx, '+' + Game.coins + ' PARA BANKAYA YATTI (DÜKKAN)', 240, 164, COL.gold, { align: 'center' });
 
     const cursor = ((Game.uiT * 3) | 0) % 2 ? '_' : ' ';
     drawText(ctx, 'ADIN: ' + Game.nameInput + cursor, 240, 196, COL.yellow, { align: 'center', shadow: COL.outline });
@@ -622,7 +704,7 @@ const UI = {
 
   // ── SKOR TABLOSU ──
   updateScores() {
-    if (Input.back() || Input.confirm()) {
+    if (Input.back() || Input.confirm() || Input.mouse.clicked) {
       Game.state = 'title'; Game.menuIdx = 0;
       Sfx.stopMusic();
     }

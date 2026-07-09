@@ -3,11 +3,21 @@
 <head>
 <meta charset="UTF-8">
 <title>Robotsepeti Survivors</title>
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<!-- PWA: ana ekrana eklenince tam ekran uygulama gibi açılır -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#181425">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="RS Survivors">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" type="image/png" href="icon-192.png">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div id="wrap"><canvas id="game" width="480" height="270"></canvas></div>
+<div id="rotate">TELEFONU YAN ÇEVİR<br><span>OYUN YATAY EKRANDA OYNANIR</span></div>
 <script src="js/utils.js"></script>
 <script src="js/font.js"></script>
 <script src="js/audio.js"></script>

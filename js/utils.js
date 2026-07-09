@@ -17,6 +17,35 @@ function hash2(x, y, s) {
   return (h >>> 0) / 4294967295;
 }
 
+// Tam ekran: mobilde adres çubuğunu gizler, ekran kaymasını bitirir.
+// Kullanıcı dokunuşundan çağrılmalı (tarayıcı şartı).
+function goFullscreen() {
+  try {
+    const el = document.documentElement;
+    if (document.fullscreenElement || document.webkitFullscreenElement) return;
+    const fn = el.requestFullscreen || el.webkitRequestFullscreen;
+    if (fn) {
+      const r = fn.call(el);
+      if (r && r.catch) r.catch(() => {});
+    }
+    // Android: yatay kilitle (tam ekranda çalışır)
+    if (screen.orientation && screen.orientation.lock) {
+      screen.orientation.lock('landscape').catch(() => {});
+    }
+  } catch (e) { /* iOS gibi desteklemeyenlerde sessizce geç */ }
+}
+
+function isFullscreen() {
+  return !!(document.fullscreenElement || document.webkitFullscreenElement);
+}
+
+function exitFullscreen() {
+  try {
+    const fn = document.exitFullscreen || document.webkitExitFullscreen;
+    if (fn) { const r = fn.call(document); if (r && r.catch) r.catch(() => {}); }
+  } catch (e) {}
+}
+
 function fmtTime(t) {
   t = Math.max(0, Math.floor(t));
   const m = Math.floor(t / 60), s = t % 60;

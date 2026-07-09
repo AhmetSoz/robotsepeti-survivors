@@ -10,13 +10,22 @@
   Input.init(canvas);
   Meta.load();
 
+  // PWA: service worker (yalnızca http/https — yerel dosyada çalışmaz)
+  if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+
   // pencereye tam sığan piksel ölçek
   function resize() {
-    const s = Math.max(1, Math.floor(Math.min(window.innerWidth / 480, window.innerHeight / 270)));
-    canvas.style.width = 480 * s + 'px';
-    canvas.style.height = 270 * s + 'px';
+    const raw = Math.min(window.innerWidth / 480, window.innerHeight / 270);
+    // büyük ekranda tam sayı ölçek (keskin piksel); küçük ekranda (mobil)
+    // kesirli ölçekle ekranı doldur — aksi halde telefonda minicik kalır
+    const s = raw >= 2 ? Math.floor(raw) : Math.max(0.5, raw);
+    canvas.style.width = Math.round(480 * s) + 'px';
+    canvas.style.height = Math.round(270 * s) + 'px';
   }
   window.addEventListener('resize', resize);
+  window.addEventListener('orientationchange', () => setTimeout(resize, 100));
   resize();
 
   // odak kaybında otomatik mola
@@ -114,8 +123,16 @@
   }
   if (params.get('screen') === 'select') Game.state = 'select';
   if (params.get('screen') === 'scores') Game.state = 'scores';
-  if (params.get('screen') === 'shop') Game.state = 'shop';
+  if (params.get('screen') === 'shop') {
+    Game.state = 'shop';
+    if (params.get('tab')) UI.shopTab = parseInt(params.get('tab'), 10) || 0;
+  }
   if (params.get('bank')) { Meta.bank = parseInt(params.get('bank'), 10); }
+  if (params.get('costume') && COSTUMES[params.get('costume')]) {
+    if (!Meta.data.costumes) Meta.data.costumes = {};
+    Meta.data.costumes[params.get('costume')] = 1;
+    Meta.data.costume = params.get('costume');
+  }
 
   Game.uiT = 0;
   let last = performance.now();

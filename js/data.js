@@ -480,6 +480,44 @@ const ENEMY_TYPES = {
     tele: { cd: 5, burst: 10, projSpd: 78, dmg: 11 },
     rain: { cd: 7, n: 8, dmg: 9, r: 14, warn: 0.8 }
   },
+  mudur: {
+    name: 'BÖLGE MÜDÜRÜ',
+    hp: 3400, dmg: 26, speed: 16, scale: 2.4, xp: 90, score: 5000,
+    shirt: COL.blueDark, shade: COL.navyDark, skin: COL.skin,
+    boss: true,
+    charge: { cd: 5, wind: 0.6, spd: 210, dur: 0.5 },
+    shotgun: { cd: 4.5, n: 5, spread: 0.7, projSpd: 85, dmg: 13 },
+    overlay: { oy: 0, map: { H: COL.grey, o: COL.outline, K: COL.red }, rows: [
+      '..oHHHHHHo..',
+      '.oHHHHHHHHo.',
+      '............',
+      '............',
+      '............',
+      '............',
+      '............',
+      '.....KK.....',
+      '.....KK.....'
+    ]}
+  },
+  rakip: {
+    name: 'RAKİP CEO',
+    hp: 4200, dmg: 30, speed: 15, scale: 2.5, xp: 110, score: 6000,
+    shirt: COL.greenDeep, shade: COL.outline, skin: COL.skinAlt,
+    boss: true,
+    tele: { cd: 6, burst: 14, projSpd: 85, dmg: 13 },
+    summon: { cd: 7, id: 'kuponcu', n: 3 },
+    overlay: { oy: 0, map: { H: COL.hairDark, S: COL.outline, G: COL.gold }, rows: [
+      '.HHHHHHHHHH.',
+      'HHHHHHHHHHHH',
+      '.SSSS..SSSS.',
+      '............',
+      '............',
+      '............',
+      '...G....G...',
+      '............',
+      '.....GG.....'
+    ]}
+  },
   patron: {
     name: 'BÜYÜK PATRON',
     hp: 2600, dmg: 28, speed: 14, scale: 2.7, xp: 80, score: 4000,
@@ -492,9 +530,12 @@ const ENEMY_TYPES = {
   }
 };
 
-// Boss takvimi: dakika bazlı üç ayrı patron dövüşü
+// Boss takvimi: ilk üç patron sabit, sonrası sonsuz döngü
 const BOSS_SCHEDULE = [
   { t: 300, id: 'toptanci',    banner: 'TOPTANCI GELDİ! BÜYÜK SİPARİŞ!' },
   { t: 600, id: 'karaborsaci', banner: 'KARABORSACI GELDİ! PİYASAYI KARIŞTIRIYOR!' },
   { t: 840, id: 'patron',      banner: 'BÜYÜK PATRON GELDİ! HERKES İŞ BAŞINA!' }
 ];
+// Fazla mesaide dönen boss havuzu (90 sn arayla, güçleri zamanla ölçeklenir)
+const BOSS_POOL = ['toptanci', 'karaborsaci', 'mudur', 'patron', 'rakip'];
+const BOSS_CYCLE_GAP = 150;
