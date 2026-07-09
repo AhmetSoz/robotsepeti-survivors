@@ -55,7 +55,7 @@ const UI = {
       Sfx.play('select');
       if (Game.menuIdx === 0) { Game.state = 'select'; Game.selIdx = 0; }
       else if (Game.menuIdx === 1) { Game.state = 'shop'; Game.menuIdx = 0; }
-      else if (Game.menuIdx === 2) { Game.state = 'scores'; }
+      else if (Game.menuIdx === 2) { Game.state = 'scores'; Game.fetchScores(); }
       else { Sfx.setMute(!Sfx.muted); }
     }
   },
@@ -635,7 +635,19 @@ const UI = {
     drawText(ctx, 'SKOR TABLOSU', 240, 14, COL.gold, { align: 'center', scale: 2, shadow: COL.outline });
 
     const list = Game.loadScores();
-    if (!list.length) {
+
+    // durum satırı: kayıt / yükleme / çevrimdışı / ortak tablo
+    const st = Game.scoresState;
+    let subTxt, subCol;
+    if (st === 'saving')       { subTxt = 'SKORUN KAYDEDİLİYOR...';    subCol = COL.yellow; }
+    else if (st === 'loading') { subTxt = 'ORTAK TABLO YÜKLENİYOR...'; subCol = COL.greyLight; }
+    else if (st === 'error')   { subTxt = 'İNTERNET YOK · YEREL SKORLAR'; subCol = COL.orange; }
+    else                       { subTxt = SCORES_REMOTE ? 'ROBOTSEPETİ EKİP TABLOSU' : 'YEREL SKORLAR'; subCol = COL.teal; }
+    const subOpts = { align: 'center', shadow: COL.outline };
+    if (st === 'saving' || st === 'loading') subOpts.alpha = 0.5 + Math.sin(Game.uiT * 6) * 0.4;
+    drawText(ctx, subTxt, 240, 30, subCol, subOpts);
+
+    if (!list.length && st !== 'loading') {
       drawText(ctx, 'HENÜZ SKOR YOK. İLK REKORU SEN KIR!', 240, 120, COL.grey, { align: 'center' });
     }
     this.panel(ctx, 40, 38, 400, 200, COL.navy);
@@ -665,6 +677,10 @@ const UI = {
       drawText(ctx, fmtTime(s.time), 320, y, COL.grey);
       drawText(ctx, s.score, 428, y, col, { align: 'right' });
     }
-    drawText(ctx, 'ENTER/ESC: ANA MENÜ', 240, 248, COL.greyLight, { align: 'center' });
+    // sıralaman görünen ilk 12'nin dışındaysa altta göster
+    if (Game.savedRank >= 12) {
+      drawText(ctx, 'SENİN SIRAN: #' + (Game.savedRank + 1), 240, 240, COL.gold, { align: 'center', shadow: COL.outline });
+    }
+    drawText(ctx, 'ENTER/ESC: ANA MENÜ', 240, 252, COL.greyLight, { align: 'center' });
   }
 };

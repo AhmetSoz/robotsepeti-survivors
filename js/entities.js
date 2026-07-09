@@ -463,14 +463,24 @@ function fireCar(s, w) {
   for (const e of Game.enemies) (e.x < p.x ? left++ : right++);
   const dir = left >= right ? 1 : -1;
   Sfx.play('horn');
-  const mk = (d, oy) => Game.cars.push({
-    x: p.x - d * 280, y: p.y + oy, dir: d, spd: 250,
-    dmg: s.dmg, kb: s.kb, band: s.band, hit: new Set(), life: 3
-  });
-  mk(dir, rand(-24, 24));
-  if (lvl >= 4) mk(-dir, rand(-24, 24));
-  if (lvl >= 6) mk(dir, rand(-40, 40));
-  if (w.evolved) mk(-dir, rand(-40, 40));
+  // her araca ayrı şerit, aynı yönden gelenlere kademeli mesafe:
+  // araçlar üst üste binmez, konvoy gibi arka arkaya dizilir
+  const lanes = [0, -27, 27, -50];
+  let laneIdx = 0;
+  const stagger = { '1': 0, '-1': 0 };
+  const mk = d => {
+    const stag = stagger[String(d)];
+    stagger[String(d)] += 80;
+    Game.cars.push({
+      x: p.x - d * (280 + stag), y: p.y + lanes[laneIdx++ % lanes.length] + rand(-4, 4),
+      dir: d, spd: 250, dmg: s.dmg, kb: s.kb, band: s.band,
+      hit: new Set(), life: 3 + stag / 250
+    });
+  };
+  mk(dir);
+  if (lvl >= 4) mk(-dir);
+  if (lvl >= 6) mk(dir);
+  if (w.evolved) mk(-dir);
 }
 
 function fireWave(s, w) {

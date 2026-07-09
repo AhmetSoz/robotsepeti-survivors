@@ -2,6 +2,12 @@
 // ─── Oyun akışı ve yönetmen (director) ───────────────────────
 const WIN_TIME = 900; // 15 dakika = paydos
 
+// ─── Ortak skor tablosu (Vercel + Upstash Redis) ─────────────
+// http(s) üzerinden açıldığında skorlar buluttaki API'ye gider;
+// yerel dosya (file://) olarak açıldığında localStorage'a düşer.
+const SCORES_REMOTE = location.protocol === 'http:' || location.protocol === 'https:';
+const SCORES_API = '/api/scores';
+
 const Game = {
   state: 'title',   // title | select | play | levelup | chest | pause | over | scores
   player: null,
@@ -26,6 +32,7 @@ const Game = {
   chestAnim: null,
   nameInput: '', nameDone: false,
   selIdx: 0, menuIdx: 0, savedRank: -1,
+  remoteScores: null, scoresState: 'idle',
   bgWalkers: [],
 
   // ── koşu başlat ──
@@ -510,8 +517,6 @@ const Game = {
   },
 
   saveScore() {
-    let list = [];
-    try { list = JSON.parse(localStorage.getItem('rs_scores') || '[]'); } catch (e) {}
     const entry = {
       name: this.nameInput.trim() || this.player.def.name,
       charId: this.player.charId,
@@ -521,16 +526,59 @@ const Game = {
       level: this.level,
       date: new Date().toISOString().slice(0, 10)
     };
+    // her durumda yerel kopya tut (internet yoksa skor kaybolmasın)
+    this.saveLocal(entry);
+    this.state = 'scores';
+    if (!SCORES_REMOTE) { this.scoresState = 'ok'; return; }
+    // buluta gönder: dönüşte ortak tabloyu ve sıramızı al
+    this.scoresState = 'saving';
+    fetch(SCORES_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(entry)
+    })
+      .then(r => r.json())
+      .then(d => {
+        if (!d || !d.list) throw new Error('gecersiz yanit');
+        this.remoteScores = d.list;
+        this.savedRank = (d.rank != null ? d.rank : -1);
+        this.scoresState = 'ok';
+      })
+      .catch(() => { this.scoresState = 'error'; });   // yerel kopya zaten kayıtlı
+  },
+
+  // yerel yedek tablo (localStorage) — çevrimdışı ya da API hatasında devreye girer
+  saveLocal(entry) {
+    let list = this.localScores();
     list.push(entry);
     list.sort((a, b) => b.score - a.score);
-    list = list.slice(0, 12);
+    list = list.slice(0, 20);
     this.savedRank = list.indexOf(entry);
     try { localStorage.setItem('rs_scores', JSON.stringify(list)); } catch (e) {}
-    this.state = 'scores';
+  },
+
+  localScores() {
+    try { return JSON.parse(localStorage.getItem('rs_scores') || '[]'); } catch (e) { return []; }
+  },
+
+  // ortak tabloyu buluttan çek (skor ekranına girerken çağrılır)
+  fetchScores() {
+    this.savedRank = -1;
+    if (!SCORES_REMOTE) { this.remoteScores = this.localScores(); this.scoresState = 'ok'; return; }
+    this.scoresState = 'loading';
+    fetch(SCORES_API)
+      .then(r => r.json())
+      .then(d => {
+        if (!d || !d.list) throw new Error('gecersiz yanit');
+        this.remoteScores = d.list;
+        this.scoresState = 'ok';
+      })
+      .catch(() => { this.scoresState = 'error'; });
   },
 
   loadScores() {
-    try { return JSON.parse(localStorage.getItem('rs_scores') || '[]'); } catch (e) { return []; }
+    if (this.remoteScores) return this.remoteScores;
+    return this.localScores();
   },
 
   // ── çizim ──
