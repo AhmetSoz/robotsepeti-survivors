@@ -1,0 +1,527 @@
+'use strict';
+// ─── Oyun akışı ve yönetmen (director) ───────────────────────
+const WIN_TIME = 900; // 15 dakika = paydos
+
+const Game = {
+  state: 'title',   // title | select | play | levelup | chest | pause | over | scores
+  player: null,
+  time: 0,
+  camX: 0, camY: 0, camRX: 0, camRY: 0,
+  shake: 0, freeze: 0,
+  xp: 0, level: 1, kills: 0, coins: 0, score: 0,
+  won: false,
+  enemies: [], eShots: [], boxes: [], clouds: [], rings: [],
+  cars: [], shocks: [], cones: [], pickups: [], parts: [], floats: [],
+  projs: [], corpses: [], decals: [],
+  spawnAcc: 0, eliteT: 60, hordeT: 120, bossIdx: 0, bossAlive: false, hordeN: 0,
+  banner: null, flashT: 0, flashCol: '255,255,255',
+  combo: 0, comboT: 0, comboBest: 0,
+  kickX: 0, kickY: 0,
+  pickStreak: 0, pickStreakT: 0,
+  lastHurtT: 0, lullT: 0, crateT: 8, tickN: 0, banked: false,
+  levelOptions: [], levelIdx: 0,
+  chestAnim: null,
+  nameInput: '', nameDone: false,
+  selIdx: 0, menuIdx: 0, savedRank: -1,
+  bgWalkers: [],
+
+  // ── koşu başlat ──
+  startRun(charId) {
+    this.time = 0; this.xp = 0; this.level = 1;
+    this.player = makePlayer(charId);
+    this.kills = 0; this.coins = 0; this.score = 0;
+    this.won = false; this.savedRank = -1;
+    this.camX = 0; this.camY = 0; this.shake = 0; this.freeze = 0;
+    this.enemies = []; this.eShots = []; this.boxes = []; this.clouds = [];
+    this.rings = []; this.cars = []; this.shocks = []; this.cones = [];
+    this.pickups = []; this.parts = []; this.floats = [];
+    this.projs = []; this.corpses = []; this.decals = [];
+    this.spawnAcc = 0; this.hordeT = 120; this.bossIdx = 0; this.bossAlive = false; this.hordeN = 0;
+    this.flashT = 0;
+    this.combo = 0; this.comboT = 0; this.comboBest = 0;
+    this.kickX = 0; this.kickY = 0;
+    this.pickStreak = 0; this.pickStreakT = 0;
+    this.lastHurtT = 0; this.lullT = 0; this.crateT = 6; this.tickN = 0; this.banked = false;
+    Missions.reset();
+    this.eliteT = charId === 'berker' ? 48 : 60;
+    this.banner = { txt: 'MESAİ BAŞLADI! MÜŞTERİLER GELİYOR!', t: 0 };
+    this.nameInput = ''; this.nameDone = false;
+    this.state = 'play';
+    Sfx.startMusic();
+  },
+
+  xpNeeded(l) { return 8 + (l - 1) * 7 + Math.max(0, l - 8) * 6; },
+
+  displayScore() {
+    return this.score + Math.floor(this.time * 8) + (this.level - 1) * 120 + (this.won ? 2500 : 0);
+  },
+
+  // ── güncelleme ──
+  update(dt) {
+    if (this.freeze > 0) { this.freeze -= dt; return; }
+
+    switch (this.state) {
+      case 'play': this.updatePlay(dt); break;
+      case 'levelup': UI.updateLevelUp(); break;
+      case 'chest': this.updateChest(dt); break;
+      case 'pause': UI.updatePause(); break;
+      case 'over': UI.updateOver(); break;
+      case 'title': UI.updateTitle(dt); break;
+      case 'select': UI.updateSelect(); break;
+      case 'scores': UI.updateScores(); break;
+      case 'shop': UI.updateShop(); break;
+    }
+
+    if (this.banner) {
+      this.banner.t += dt;
+      if (this.banner.t > 3) this.banner = null;
+    }
+    if (this.flashT > 0) this.flashT -= dt;
+  },
+
+  updatePlay(dt) {
+    this.time += dt;
+    if (Input.back()) { this.state = 'pause'; this.menuIdx = 0; Sfx.play('click'); return; }
+    if (Input.pressed['KeyM']) Sfx.setMute(!Sfx.muted);
+
+    updatePlayer(dt);
+    fireWeapons(dt);
+    updateWeaponEntities(dt);
+    updateEnemies(dt);
+    updatePickups(dt);
+    updateFx(dt);
+    this.director(dt);
+    Missions.update(dt);
+
+    // kombo penceresi
+    if (this.comboT > 0) {
+      this.comboT -= dt;
+      if (this.comboT <= 0) this.combo = 0;
+    }
+    // çip toplama serisi penceresi
+    if (this.pickStreakT > 0) {
+      this.pickStreakT -= dt;
+      if (this.pickStreakT <= 0) this.pickStreak = 0;
+    }
+    // müzik yoğunluğu: boss veya akın yaklaşınca tempo artar
+    Sfx.intensity = (this.bossAlive || this.hordeT < 6 || this.enemies.length > 110) ? 1 : 0;
+
+    // kamera
+    const k = 1 - Math.exp(-8 * dt);
+    this.camX += (this.player.x - this.camX) * k;
+    this.camY += (this.player.y - this.camY) * k;
+    if (this.shake > 0) this.shake = Math.max(0, this.shake - 24 * dt);
+    // kamera tepmesi (vuruş darbesi)
+    const kd = Math.exp(-10 * dt);
+    this.kickX *= kd; this.kickY *= kd;
+
+    // paydos!
+    if (this.time >= WIN_TIME && !this.won) {
+      this.won = true;
+      this.state = 'over';
+      this.nameInput = this.player.def.name;
+      this.bankCoins();
+      Sfx.play('win');
+    }
+  },
+
+  // ── dalga yönetmeni ──
+  director(dt) {
+    const t = this.time;
+    const cap = t > 420 ? 180 : 140;
+
+    // sürekli akış: akın sonrası kısa nefes molası, son dakikada çılgınlık
+    if (this.lullT > 0) this.lullT -= dt;
+    let rate = (1.1 + t * 0.011) * (this.lullT > 0 ? 0.45 : 1);
+    if (t > WIN_TIME - 50) rate *= 2.2;
+    this.spawnAcc += rate * dt;
+    while (this.spawnAcc >= 1) {
+      this.spawnAcc -= 1;
+      if (this.enemies.length < cap) this.spawnOne();
+    }
+
+    // kırılabilir kasa/variller: sahada her zaman birkaç tane olsun
+    this.crateT -= dt;
+    if (this.crateT <= 0) {
+      this.crateT = 14;
+      let crates = 0;
+      for (const e of this.enemies) if (e.type.breakable) crates++;
+      if (crates < 5) {
+        const a = rand(TAU), r = rand(120, 240);
+        spawnEnemy(Math.random() < 0.6 ? 'kasa' : 'varil',
+          this.player.x + Math.cos(a) * r, this.player.y + Math.sin(a) * r);
+      }
+    }
+
+    // akın uyarısı: son 5 saniyede tik tak
+    if (this.hordeT < 5 && this.hordeT > 0) {
+      const sec = Math.ceil(this.hordeT);
+      if (sec !== this.tickN) { this.tickN = sec; Sfx.play('tick'); }
+    }
+
+    // elit müşteri (koli taşıyıcısı)
+    this.eliteT -= dt;
+    if (this.eliteT <= 0) {
+      this.eliteT = this.player.charId === 'berker' ? 60 : 75;
+      this.spawnAt('kizgin');
+      this.banner = { txt: 'KIZGIN MÜŞTERİ GELDİ!', t: 0 };
+      Sfx.play('akin');
+    }
+
+    // akın dalgası: her seferinde farklı desen
+    this.hordeT -= dt;
+    if (this.hordeT <= 0) {
+      this.hordeT = 90;
+      this.lullT = 14;   // akından sonra nefes alma anı
+      Sfx.play('akin');
+      const n = 14 + Math.floor(t / 60) * 2;
+      const p = this.player;
+      const pat = this.hordeN++ % 3;
+      if (pat === 0) {
+        // çember kuşatması
+        this.banner = { txt: 'MÜŞTERİ AKINI!', t: 0 };
+        for (let i = 0; i < n; i++) {
+          const a = (i / n) * TAU;
+          spawnEnemy('aceleci', p.x + Math.cos(a) * 260, p.y + Math.sin(a) * 260);
+        }
+      } else if (pat === 1) {
+        // duvar: tek taraftan hat
+        this.banner = { txt: 'OTOBÜS DOLUSU MÜŞTERİ GELDİ!', t: 0 };
+        const dir = Math.random() < 0.5 ? 1 : -1;
+        for (let i = 0; i < n; i++) {
+          spawnEnemy(i % 4 === 0 ? 'kuponcu' : 'aceleci',
+            p.x + dir * (270 + rand(40)), p.y + (i - n / 2) * 22);
+        }
+      } else {
+        // kıskaç: iki karşı köşe
+        this.banner = { txt: 'İKİ KAPIDAN BİRDEN GELİYORLAR!', t: 0 };
+        for (let i = 0; i < n; i++) {
+          const side = i % 2 ? 1 : -1;
+          const a = rand(TAU / 6) - TAU / 12 + (side > 0 ? 0 : Math.PI);
+          spawnEnemy(i % 5 === 0 ? 'kararsiz' : 'aceleci',
+            p.x + Math.cos(a) * 270, p.y + Math.sin(a) * 270);
+        }
+      }
+    }
+
+    // boss takvimi
+    if (this.bossIdx < BOSS_SCHEDULE.length && t >= BOSS_SCHEDULE[this.bossIdx].t) {
+      const b = BOSS_SCHEDULE[this.bossIdx++];
+      this.spawnAt(b.id);
+      this.bossAlive = true;
+      this.banner = { txt: b.banner, t: 0 };
+      Sfx.play('boss');
+      this.shake = Math.max(this.shake, 3);
+    }
+  },
+
+  spawnOne() {
+    const t = this.time;
+    const pool = [];
+    for (const id in ENEMY_TYPES) {
+      const d = ENEMY_TYPES[id];
+      if (d.elite || d.boss || !d.weight) continue;
+      if (t >= d.minTime) pool.push({ id, w: d.weight });
+    }
+    let total = 0;
+    for (const o of pool) total += o.w;
+    let r = rand(total);
+    for (const o of pool) {
+      r -= o.w;
+      if (r <= 0) { this.spawnAt(o.id); return; }
+    }
+  },
+
+  spawnAt(typeId) {
+    const a = rand(TAU);
+    const r = 280 + rand(40);
+    spawnEnemy(typeId, this.player.x + Math.cos(a) * r, this.player.y + Math.sin(a) * r);
+  },
+
+  // ── seviye atlama ──
+  checkLevelUp() {
+    if (this.xp >= this.xpNeeded(this.level)) {
+      this.xp -= this.xpNeeded(this.level);
+      this.level++;
+      const p = this.player;
+      // nova patlaması: seviye gücü hissedilsin
+      Game.shocks.push({ x: p.x, y: p.y - 6, r: 70, t: 0, col: COL.teal });
+      for (const e of this.enemies) {
+        if (e.spawnT > 0) continue;
+        if (dist2(p.x, p.y, e.x, e.y) < 70 * 70) {
+          const a = Math.atan2(e.y - p.y, e.x - p.x);
+          damageEnemy(e, 5 + this.level, Math.cos(a) * 240, Math.sin(a) * 240, true);
+        }
+      }
+      for (let i = 0; i < 16; i++) {
+        const a = (i / 16) * TAU;
+        addPart({ x: p.x + Math.cos(a) * 10, y: p.y - 8 + Math.sin(a) * 6,
+          vx: Math.cos(a) * 70, vy: Math.sin(a) * 40 - 20, dur: 0.5, type: 'spark', col: COL.teal });
+      }
+      // küçük iyileşme + kalıcı güç artışı (recalcStats seviyeyi okur)
+      p.hp = Math.min(p.maxHp, p.hp + Math.round(p.maxHp * 0.06));
+      recalcStats(p);
+      this.flashT = 0.25; this.flashCol = '44,232,245';
+      this.shake = Math.max(this.shake, 2);
+      this.levelOptions = this.genOptions();
+      this.levelIdx = 0;
+      this.state = 'levelup';
+      Sfx.play('levelup'); Sfx.play('nova');
+    }
+  },
+
+  genOptions() {
+    const p = this.player;
+    const pool = [];
+    // sahip olunan silahların yükseltmeleri
+    for (const w of p.weapons) {
+      if (w.lvl >= WEAPON_MAX_LVL) continue;
+      const d = WEAPONS[w.id];
+      pool.push({ kind: 'weapon', id: w.id, name: d.name, desc: d.lvlDesc,
+        lvl: w.lvl + 1, weight: 3 });
+    }
+    // aktif yetenek yükseltmesi
+    if (p.skill.lvl < SKILL_MAX_LVL) {
+      const sd = SKILLS[p.charId];
+      pool.push({ kind: 'skill', id: 'sk_' + p.charId, name: sd.name, desc: sd.lvlDesc,
+        lvl: p.skill.lvl + 1, weight: 2 });
+    }
+    // boş slot varsa yeni silahlar (dükkândan açılmamış olanlar çıkmaz)
+    if (p.weapons.length < MAX_WEAPONS) {
+      const owned = new Set(p.weapons.map(w => w.id));
+      const unowned = Object.keys(WEAPONS).filter(id => !owned.has(id) && Meta.weaponUnlocked(id));
+      // her seferinde en fazla 2 farklı yeni silah teklif edilir
+      for (let i = 0; i < 2 && unowned.length; i++) {
+        const id = unowned.splice((Math.random() * unowned.length) | 0, 1)[0];
+        const d = WEAPONS[id];
+        pool.push({ kind: 'newweapon', id, name: d.name, desc: d.desc, lvl: 1, weight: 2 });
+      }
+    }
+    for (const id in ITEMS) {
+      const it = ITEMS[id];
+      const cur = p.items[id] || 0;
+      if (it.heal) {
+        if (p.hp < p.maxHp * 0.7) pool.push({ kind: 'item', id, name: it.name, desc: it.desc, lvl: 0, weight: 1 });
+        continue;
+      }
+      if (cur < it.max) pool.push({ kind: 'item', id, name: it.name, desc: it.desc, lvl: cur + 1, weight: 1 });
+    }
+    // ağırlıklı, tekrarsız 3 seçim
+    const opts = [];
+    const copy = pool.slice();
+    while (opts.length < 3 && copy.length) {
+      let total = 0;
+      for (const o of copy) total += o.weight;
+      let r = rand(total);
+      for (let i = 0; i < copy.length; i++) {
+        r -= copy[i].weight;
+        if (r <= 0) { opts.push(copy.splice(i, 1)[0]); break; }
+      }
+    }
+    return opts;
+  },
+
+  applyOption(o) {
+    const p = this.player;
+    if (o.kind === 'weapon') {
+      const w = p.weapons.find(w => w.id === o.id);
+      if (w) w.lvl++;
+    } else if (o.kind === 'newweapon') {
+      p.weapons.push(makeWeapon(o.id));
+    } else if (o.kind === 'skill') {
+      p.skill.lvl++;
+    } else if (ITEMS[o.id].heal) {
+      p.hp = Math.min(p.maxHp, p.hp + Math.round(p.maxHp * 0.4));
+    } else {
+      p.items[o.id] = (p.items[o.id] || 0) + 1;
+      recalcStats(p);
+    }
+    Sfx.play('select');
+    this.state = 'play';
+    this.checkLevelUp(); // zincirleme seviye varsa devam
+  },
+
+  // Evrim koşulu sağlayan ilk silah (SV6 + eşleşen item)
+  evolvableWeapon() {
+    const p = this.player;
+    return p.weapons.find(w => {
+      const ev = EVOLUTIONS[w.id];
+      return ev && !w.evolved && w.lvl >= WEAPON_MAX_LVL && (p.items[ev.need] || 0) >= ev.needLvl;
+    }) || null;
+  },
+
+  // ── kargo kolisi (sandık) ──
+  openChest() {
+    const p = this.player;
+
+    // önce evrim kontrolü: koşullar sağlanıyorsa koli evrim getirir
+    const evoW = this.evolvableWeapon();
+    if (evoW) {
+      const ev = EVOLUTIONS[evoW.id];
+      evoW.evolved = true;
+      this.coins += 5;
+      this.score += Math.round(400 * p.greed);
+      this.chestAnim = { t: 0, rewards: [{ name: ev.name, icon: evoW.id, evolve: true, desc: ev.desc }], evolve: true };
+      this.state = 'chest';
+      this.banner = { txt: 'SİLAH EVRİMLEŞTİ: ' + ev.name + '!', t: 0 };
+      Sfx.play('evolve');
+      return;
+    }
+
+    const roll = Math.random();
+    let count = roll < 0.65 ? 1 : (roll < 0.93 ? 3 : 5);
+    if (p.charId === 'berker') count++;
+    const rewards = [];
+    for (let i = 0; i < count; i++) {
+      const opts = this.genOptions();
+      if (!opts.length) { this.coins += 2; this.score += 60; rewards.push({ name: 'PARA DESTESİ', icon: 'prim' }); continue; }
+      const o = opts[0];
+      if (o.kind === 'weapon') {
+        const w = p.weapons.find(w => w.id === o.id);
+        w.lvl++;
+        rewards.push({ name: o.name + ' SV' + w.lvl, icon: o.id });
+      } else if (o.kind === 'newweapon') {
+        p.weapons.push(makeWeapon(o.id));
+        rewards.push({ name: o.name + ' (YENİ!)', icon: o.id });
+      } else if (o.kind === 'skill') {
+        p.skill.lvl++;
+        rewards.push({ name: o.name + ' SV' + p.skill.lvl, icon: o.id });
+      } else if (ITEMS[o.id].heal) {
+        p.hp = Math.min(p.maxHp, p.hp + Math.round(p.maxHp * 0.4));
+        rewards.push({ name: o.name, icon: o.id });
+      } else {
+        p.items[o.id] = (p.items[o.id] || 0) + 1;
+        recalcStats(p);
+        rewards.push({ name: o.name + ' SV' + p.items[o.id], icon: o.id });
+      }
+    }
+    this.coins += 3 + Meta.lvl('kolipara') * 2;
+    this.score += Math.round(150 * p.greed);
+    this.chestAnim = { t: 0, rewards };
+    this.state = 'chest';
+    Sfx.play('chest');
+  },
+
+  updateChest(dt) {
+    const a = this.chestAnim;
+    a.t += dt;
+    if (a.t > 1.1 && !a.burst) {
+      a.burst = true;
+      for (let i = 0; i < 24; i++) {
+        addPart({ x: this.player.x, y: this.player.y - 10, vx: rand(-90, 90), vy: rand(-130, -30),
+          dur: 0.8, type: 'px', col: pick([COL.yellow, COL.gold, COL.teal, COL.red, COL.white]), size: 2 });
+      }
+    }
+    updateFx(dt);
+    if (a.t > 1.2 && (Input.confirm() || Input.mouse.clicked || a.t > 4.5)) {
+      this.chestAnim = null;
+      this.state = 'play';
+      this.checkLevelUp();
+    }
+  },
+
+  // ── oyun sonu ──
+  bankCoins() {
+    if (this.banked) return;
+    this.banked = true;
+    Meta.deposit(this.coins);
+  },
+
+  gameOver() {
+    this.state = 'over';
+    this.won = false;
+    this.nameInput = this.player.def.name;
+    this.bankCoins();
+    Sfx.play('over');
+    this.shake = 6;
+  },
+
+  saveScore() {
+    let list = [];
+    try { list = JSON.parse(localStorage.getItem('rs_scores') || '[]'); } catch (e) {}
+    const entry = {
+      name: this.nameInput.trim() || this.player.def.name,
+      charId: this.player.charId,
+      score: this.displayScore(),
+      time: Math.floor(this.time),
+      kills: this.kills,
+      level: this.level,
+      date: new Date().toISOString().slice(0, 10)
+    };
+    list.push(entry);
+    list.sort((a, b) => b.score - a.score);
+    list = list.slice(0, 12);
+    this.savedRank = list.indexOf(entry);
+    try { localStorage.setItem('rs_scores', JSON.stringify(list)); } catch (e) {}
+    this.state = 'scores';
+  },
+
+  loadScores() {
+    try { return JSON.parse(localStorage.getItem('rs_scores') || '[]'); } catch (e) { return []; }
+  },
+
+  // ── çizim ──
+  draw(ctx) {
+    ctx.fillStyle = COL.outline;
+    ctx.fillRect(0, 0, 480, 270);
+
+    if (this.state === 'title') { UI.drawTitle(ctx); return; }
+    if (this.state === 'select') { UI.drawSelect(ctx); return; }
+    if (this.state === 'scores') { UI.drawScores(ctx); return; }
+    if (this.state === 'shop') { UI.drawShop(ctx); return; }
+
+    // oyun sahnesi (play, levelup, chest, pause, over)
+    this.camRX = this.camX + (this.shake > 0 ? rand(-this.shake, this.shake) : 0) + this.kickX;
+    this.camRY = this.camY + (this.shake > 0 ? rand(-this.shake, this.shake) : 0) + this.kickY;
+    World.drawFloor(ctx, this.camRX, this.camRY, this.time);
+    World.drawProps(ctx, this.camRX, this.camRY);
+    drawPlayField(ctx);
+
+    // vardiya ilerledikçe ışık değişir: akşam turuncusu → gece mavisi
+    const k = clamp(this.time / WIN_TIME, 0, 1);
+    const evening = Math.sin(clamp((k - 0.25) / 0.5, 0, 1) * Math.PI); // 4-11 dk arası tepe yapar
+    if (evening > 0.01) {
+      ctx.fillStyle = 'rgba(247,118,34,' + (evening * 0.07).toFixed(3) + ')';
+      ctx.fillRect(0, 0, 480, 270);
+    }
+    const night = Math.max(0, (k - 0.55) / 0.45);
+    if (night > 0.01) {
+      ctx.fillStyle = 'rgba(18,28,80,' + (night * 0.22).toFixed(3) + ')';
+      ctx.fillRect(0, 0, 480, 270);
+    }
+
+    // havada süzülen toz zerreleri (depo atmosferi)
+    for (let i = 0; i < 16; i++) {
+      const h = hash2(i, 7, 3);
+      const mx = ((h * 480 + this.time * (4 + h * 7)) % 500) - 10;
+      const my = ((hash2(i, 11, 5) * 270 + this.time * (2 + h * 4)) % 290) - 10;
+      const a = 0.04 + 0.06 * Math.sin(this.time * (0.5 + h) + i * 2);
+      if (a <= 0) continue;
+      ctx.fillStyle = 'rgba(255,240,210,' + a.toFixed(3) + ')';
+      ctx.fillRect(Math.round(mx), Math.round(my), i % 5 === 0 ? 2 : 1, 1);
+    }
+
+    // yetenek/seviye ekran flaşı
+    if (this.flashT > 0) {
+      ctx.fillStyle = 'rgba(' + this.flashCol + ',' + (this.flashT * 0.5).toFixed(3) + ')';
+      ctx.fillRect(0, 0, 480, 270);
+    }
+
+    World.drawVignette(ctx);
+
+    // düşük can uyarısı: kırmızı nabız
+    const p = this.player;
+    if (p && p.hp > 0 && p.hp < p.maxHp * 0.3 && this.state === 'play') {
+      const pulse = 0.06 + Math.sin(this.time * 6) * 0.04;
+      ctx.fillStyle = 'rgba(228,59,68,' + pulse.toFixed(3) + ')';
+      ctx.fillRect(0, 0, 480, 270);
+    }
+
+    UI.drawHUD(ctx);
+
+    if (this.state === 'levelup') UI.drawLevelUp(ctx);
+    else if (this.state === 'chest') UI.drawChest(ctx);
+    else if (this.state === 'pause') UI.drawPause(ctx);
+    else if (this.state === 'over') UI.drawOver(ctx);
+  }
+};
