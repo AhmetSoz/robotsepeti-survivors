@@ -427,7 +427,7 @@ const Game = {
     }
     // aktif yetenek yükseltmesi
     if (p.skill.lvl < SKILL_MAX_LVL) {
-      const sd = SKILLS[p.charId];
+      const sd = SKILLS[p.skill.id];
       pool.push({ kind: 'skill', id: 'sk_' + p.charId, name: sd.name, desc: sd.lvlDesc,
         lvl: p.skill.lvl + 1, weight: 2 });
     }

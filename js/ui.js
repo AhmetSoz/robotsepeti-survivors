@@ -367,7 +367,7 @@ const UI = {
     const id = CHAR_ORDER[Game.selIdx];
     const def = CHARACTERS[id];
     const w = WEAPONS[def.weapon];
-    const sk = SKILLS[id];
+    const sk = SKILLS[TECHS[id].skills[0]];
     this.panel(ctx, 10, 224, 460, 42, def.color);
     ctx.drawImage(SPR.icons[def.weapon], 16, 227);
     drawText(ctx, w.name + ': ' + w.desc, 34, 228, COL.white);
