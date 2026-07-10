@@ -48,9 +48,24 @@
 
   // hızlı test için URL parametreleri: ?char=ahmet&t=120
   const params = new URLSearchParams(location.search);
+  // tüm teknik kilitlerini aç (seçim/dükkân ekran testleri)
+  if (params.get('unlockall')) {
+    for (const cid in TECHS) {
+      for (const listName of ['weapons', 'skills']) {
+        for (const tid of TECHS[cid][listName]) Meta.grantUnlock('t_' + tid);
+      }
+    }
+  }
   if (params.get('char')) {
     const c = params.get('char');
     if (CHARACTERS[c]) {
+      // loadout testi: ?lw=kemer&ls=sampiyonk (kilidi otomatik açar)
+      if (params.get('lw') || params.get('ls')) {
+        const lw = params.get('lw'), ls = params.get('ls');
+        if (lw) Meta.grantUnlock('t_' + lw);
+        if (ls) Meta.grantUnlock('t_' + ls);
+        Meta.setLoadout(c, lw || TECHS[c].weapons[0], ls || TECHS[c].skills[0]);
+      }
       Game.startRun(c);
       const skip = parseFloat(params.get('t') || '0');
       if (skip > 0) Game.time = skip;

@@ -152,34 +152,82 @@ const UI = {
     drawText(ctx, 'ROBOTSEPETİ EKİP OYUNU · V4.0', 240, 250, COL.navy, { align: 'center' });
   },
 
-  // ── DÜKKAN: kalıcı yükseltmeler ──
-  shopTab: 0,   // 0: yükseltmeler, 1: kostümler
+  // ── DÜKKAN: kalıcı yükseltmeler + kostümler + teknikler ──
+  shopTab: 0,   // 0: yükseltmeler, 1: kostümler, 2: teknikler
+  _techRows: null,
+
+  // teknik satırları: her karakterin kilitlenebilir vuruş/yetenek varyantları
+  techRows() {
+    if (!this._techRows) {
+      this._techRows = [];
+      for (const cid of CHAR_ORDER) {
+        for (const listName of ['weapons', 'skills']) {
+          const list = TECHS[cid][listName];
+          for (let idx = 1; idx < list.length; idx++) {
+            this._techRows.push({ cid, listName, id: list[idx], cost: TECH_COST[idx] });
+          }
+        }
+      }
+    }
+    return this._techRows;
+  },
+
+  // teknik kilidini açan başarımın adı (yoksa null)
+  achFor(unlockId) {
+    if (!this._achUnlocks) {
+      this._achUnlocks = {};
+      for (const a of ACH_DEFS) {
+        if (a.reward && a.reward.unlock) this._achUnlocks[a.reward.unlock] = a.name;
+      }
+    }
+    return this._achUnlocks[unlockId] || null;
+  },
+
+  shopRows() {
+    return this.shopTab === 0 ? META_ORDER : (this.shopTab === 1 ? COSTUME_ORDER : this.techRows());
+  },
 
   updateShop() {
     if (Input.back()) { Game.state = 'title'; Game.menuIdx = 0; return; }
     // sekme değiştir: sol/sağ ya da sekme başlığına tıkla
-    const rows = this.shopTab === 0 ? META_ORDER : COSTUME_ORDER;
-    if (Input.pressed['ArrowLeft'] || Input.pressed['KeyA'] ||
-        Input.pressed['ArrowRight'] || Input.pressed['KeyD']) {
-      this.shopTab = 1 - this.shopTab; Game.menuIdx = 0; Sfx.play('click'); return;
+    if (Input.pressed['ArrowRight'] || Input.pressed['KeyD']) {
+      this.shopTab = (this.shopTab + 1) % 3; Game.menuIdx = 0; Sfx.play('click'); return;
     }
-    for (let tb = 0; tb < 2; tb++) {
-      if (Input.mouse.clicked && Input.mouseIn(140 + tb * 110, 24, 100, 14) && this.shopTab !== tb) {
+    if (Input.pressed['ArrowLeft'] || Input.pressed['KeyA']) {
+      this.shopTab = (this.shopTab + 2) % 3; Game.menuIdx = 0; Sfx.play('click'); return;
+    }
+    for (let tb = 0; tb < 3; tb++) {
+      if (Input.mouse.clicked && Input.mouseIn(80 + tb * 110, 24, 100, 14) && this.shopTab !== tb) {
         this.shopTab = tb; Game.menuIdx = 0; Sfx.play('click'); return;
       }
     }
+    const rows = this.shopRows();
     this.navVertical(rows.length);
-    const act = id => {
-      const ok = this.shopTab === 0 ? Meta.buy(id) : Meta.buyOrWear(id);
+    const act = i => {
+      const r = rows[i];
+      const ok = this.shopTab === 0 ? Meta.buy(r)
+               : this.shopTab === 1 ? Meta.buyOrWear(r)
+               : Meta.buyUnlock('t_' + r.id, r.cost);
       Sfx.play(ok ? 'chest' : 'hurt');
     };
-    for (let i = 0; i < rows.length; i++) {
-      if (Input.mouseIn(40, 44 + i * 21, 400, 19)) {
-        Game.menuIdx = i;
-        if (Input.mouse.clicked) act(rows[i]);
+    if (this.shopTab === 2) {
+      // kaydırmalı liste: tıklanan satır seçilir, seçiliyken tıklanınca alınır
+      const first = clamp(Game.menuIdx - 4, 0, Math.max(0, rows.length - 9));
+      for (let r = 0; r < 9 && first + r < rows.length; r++) {
+        if (Input.mouse.clicked && Input.mouseIn(40, 44 + r * 21, 400, 19)) {
+          if (Game.menuIdx === first + r) act(Game.menuIdx);
+          else Game.menuIdx = first + r;
+        }
+      }
+    } else {
+      for (let i = 0; i < rows.length; i++) {
+        if (Input.mouseIn(40, 44 + i * 21, 400, 19)) {
+          Game.menuIdx = i;
+          if (Input.mouse.clicked) act(i);
+        }
       }
     }
-    if (Input.confirm()) act(rows[Game.menuIdx]);
+    if (Input.confirm()) act(Game.menuIdx);
   },
 
   drawShop(ctx) {
@@ -190,10 +238,10 @@ const UI = {
     drawText(ctx, Meta.bank, 390, 11, COL.gold, { shadow: COL.outline });
 
     // sekmeler
-    const tabs = ['YÜKSELTMELER', 'KOSTÜMLER'];
-    for (let tb = 0; tb < 2; tb++) {
+    const tabs = ['YÜKSELTMELER', 'KOSTÜMLER', 'TEKNİKLER'];
+    for (let tb = 0; tb < 3; tb++) {
       const on = this.shopTab === tb;
-      const x = 140 + tb * 110;
+      const x = 80 + tb * 110;
       ctx.fillStyle = on ? 'rgba(254,174,52,0.15)' : 'rgba(38,43,68,0.8)';
       ctx.fillRect(x, 24, 100, 14);
       ctx.strokeStyle = on ? COL.gold : COL.navy;
@@ -226,7 +274,7 @@ const UI = {
         }
       }
       drawText(ctx, 'ENTER: SATIN AL · A/D: SEKME · ESC: GERİ', 240, 250, COL.greyLight, { align: 'center' });
-    } else {
+    } else if (this.shopTab === 1) {
       // ── kostümler ──
       for (let i = 0; i < COSTUME_ORDER.length; i++) {
         const id = COSTUME_ORDER[i];
@@ -247,6 +295,39 @@ const UI = {
         }
       }
       drawText(ctx, 'ENTER: SATIN AL / GİY · A/D: SEKME · ESC: GERİ', 240, 250, COL.greyLight, { align: 'center' });
+    } else {
+      // ── teknikler: karakter vuruş/yetenek varyant kilitleri ──
+      const rows = this.techRows();
+      const first = clamp(Game.menuIdx - 4, 0, Math.max(0, rows.length - 9));
+      for (let r = 0; r < 9 && first + r < rows.length; r++) {
+        const t = rows[first + r];
+        const def = t.listName === 'weapons' ? WEAPONS[t.id] : SKILLS[t.id];
+        const cdef = CHARACTERS[t.cid];
+        const open = Meta.unlocked('t_' + t.id);
+        const sel = Game.menuIdx === first + r;
+        const y = 44 + r * 21;
+        this.panel(ctx, 40, y, 400, 19, sel ? COL.yellow : (open ? COL.teal : COL.navy));
+        // karakter renk şeridi + ikon
+        ctx.fillStyle = cdef.color; ctx.fillRect(44, y + 2, 3, 15);
+        const icon = SPR.icons[t.listName === 'weapons' ? t.id : def.icon];
+        if (icon) ctx.drawImage(icon, 51, y + 3);
+        const viaAch = !open && this.achFor('t_' + t.id);
+        drawText(ctx, cdef.name + ' · ' + def.name, 67, y + 2, sel ? COL.yellow : (open ? COL.teal : COL.white));
+        drawText(ctx, (t.listName === 'weapons' ? 'VURUŞ' : 'YETENEK') + ' — ' + def.desc.slice(0, viaAch ? 27 : 40), 67, y + 11, COL.grey);
+        if (open) {
+          drawText(ctx, 'AÇIK', 434, y + 6, COL.green, { align: 'right' });
+        } else {
+          drawText(ctx, t.cost + ' PARA', 434, y + 3, Meta.bank >= t.cost ? COL.gold : COL.redDark, { align: 'right' });
+          if (viaAch) drawText(ctx, 'BAŞARIMLA DA AÇILIR', 434, y + 12, COL.greyDark, { align: 'right' });
+        }
+      }
+      // kaydırma çubuğu
+      if (rows.length > 9) {
+        const k = Game.menuIdx / (rows.length - 1);
+        ctx.fillStyle = COL.navyDark; ctx.fillRect(444, 44, 3, 187);
+        ctx.fillStyle = COL.grey; ctx.fillRect(444, 44 + Math.round(k * 173), 3, 14);
+      }
+      drawText(ctx, 'ENTER: KİLİDİ AÇ · A/D: SEKME · ESC: GERİ', 240, 250, COL.greyLight, { align: 'center' });
     }
   },
 
@@ -303,7 +384,9 @@ const UI = {
           const cur = Achievements.progressOf(a);
           drawText(ctx, cur + '/' + a.target, 444, y + 3, COL.greyLight, { align: 'right' });
           if (a.reward && a.reward.coins) {
-            drawText(ctx, '+' + a.reward.coins + ' PARA', 444, y + 12, COL.gold, { align: 'right' });
+            const extra = a.reward.unlock ? ' +TEKNİK' : '';
+            drawText(ctx, '+' + a.reward.coins + ' PARA' + extra, 444, y + 12,
+              a.reward.unlock ? COL.teal : COL.gold, { align: 'right' });
           }
         }
       }
@@ -328,6 +411,14 @@ const UI = {
     if (Input.pressed['ArrowLeft'] || Input.pressed['KeyA']) { Game.selIdx = (Game.selIdx + 5) % 6; Sfx.play('click'); }
     if (Input.pressed['ArrowDown'] || Input.pressed['KeyS']) { Game.selIdx = (Game.selIdx + 3) % 6; Sfx.play('click'); }
     if (Input.pressed['ArrowUp'] || Input.pressed['KeyW']) { Game.selIdx = (Game.selIdx + 3) % 6; Sfx.play('click'); }
+    // teknik (vuruş/yetenek) seçimi: Q/E döngü, kutucuklara tıklama
+    const cid = CHAR_ORDER[Game.selIdx];
+    if (Input.pressed['KeyQ']) this.cycleTech(cid, 'weapons');
+    if (Input.pressed['KeyE']) this.cycleTech(cid, 'skills');
+    for (let k = 0; k < 3; k++) {
+      if (Input.mouse.clicked && Input.mouseIn(392 + k * 17, 225, 15, 15)) { this.pickTech(cid, 'weapons', k); return; }
+      if (Input.mouse.clicked && Input.mouseIn(392 + k * 17, 249, 15, 15)) { this.pickTech(cid, 'skills', k); return; }
+    }
     for (let i = 0; i < 6; i++) {
       const r = this.cardRect(i);
       if (Input.mouseIn(r.x, r.y, r.w, r.h)) {
@@ -337,6 +428,60 @@ const UI = {
       }
     }
     if (Input.confirm()) { Sfx.play('select'); Game.startRun(CHAR_ORDER[Game.selIdx]); }
+  },
+
+  // ── teknik seçim yardımcıları ──
+  cycleTech(cid, listName) {
+    const list = TECHS[cid][listName];
+    const lo = Meta.loadout(cid);
+    const cur = list.indexOf(listName === 'weapons' ? lo.w : lo.s);
+    for (let step = 1; step < list.length; step++) {
+      const idx = (cur + step) % list.length;
+      if (Meta.techUnlocked(cid, listName, list[idx])) {
+        this.applyTech(cid, listName, list[idx]);
+        return;
+      }
+    }
+    Sfx.play('hurt');   // açık başka teknik yok
+  },
+
+  pickTech(cid, listName, idx) {
+    const id = TECHS[cid][listName][idx];
+    if (!id) return;
+    if (!Meta.techUnlocked(cid, listName, id)) { Sfx.play('hurt'); return; }
+    this.applyTech(cid, listName, id);
+  },
+
+  applyTech(cid, listName, id) {
+    const lo = Meta.loadout(cid);
+    Meta.setLoadout(cid, listName === 'weapons' ? id : lo.w, listName === 'skills' ? id : lo.s);
+    Sfx.play('click');
+  },
+
+  // 3'lü teknik kutucuğu şeridi (seçim ekranı alt paneli)
+  techSlots(ctx, cid, listName, curId, x0, y0) {
+    const list = TECHS[cid][listName];
+    for (let k = 0; k < list.length; k++) {
+      const tid = list[k];
+      const open = Meta.techUnlocked(cid, listName, tid);
+      const cur = tid === curId;
+      const x = x0 + k * 17;
+      ctx.fillStyle = cur ? 'rgba(254,231,97,0.18)' : 'rgba(24,20,37,0.6)';
+      ctx.fillRect(x, y0, 15, 15);
+      ctx.strokeStyle = cur ? COL.yellow : (open ? COL.greyDark : COL.navyDark);
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x + 0.5, y0 + 0.5, 14, 14);
+      const icon = SPR.icons[listName === 'weapons' ? tid : SKILLS[tid].icon];
+      if (open) {
+        if (icon) ctx.drawImage(icon, x + 1, y0 + 1);
+      } else {
+        // kilitli: soluk ikon + altın kilit
+        if (icon) { ctx.save(); ctx.globalAlpha = 0.22; ctx.drawImage(icon, x + 1, y0 + 1); ctx.restore(); }
+        ctx.fillStyle = COL.gold;
+        ctx.fillRect(x + 5, y0 + 7, 5, 4);
+        ctx.fillRect(x + 6, y0 + 5, 1, 2); ctx.fillRect(x + 8, y0 + 5, 1, 2);
+      }
+    }
   },
 
   drawSelect(ctx) {
@@ -363,17 +508,24 @@ const UI = {
         sel ? COL.greyLight : COL.greyDark, { align: 'center' });
     }
 
-    // seçili karakter detayı
+    // seçili karakter detayı + teknik (loadout) seçimi
     const id = CHAR_ORDER[Game.selIdx];
     const def = CHARACTERS[id];
-    const w = WEAPONS[def.weapon];
-    const sk = SKILLS[TECHS[id].skills[0]];
+    const lo = Meta.loadout(id);
+    const w = WEAPONS[lo.w];
+    const sk = SKILLS[lo.s];
+    drawText(ctx, 'Q/E VEYA KUTUCUKLAR: TEKNİK SEÇ · KİLİTLİLER DÜKKAN VE BAŞARIMLARLA AÇILIR', 240, 216, COL.greyDark, { align: 'center' });
     this.panel(ctx, 10, 224, 460, 42, def.color);
-    ctx.drawImage(SPR.icons[def.weapon], 16, 227);
-    drawText(ctx, w.name + ': ' + w.desc, 34, 228, COL.white);
-    drawText(ctx, def.passiveName + ': ' + def.passiveDesc, 34, 240, COL.teal);
-    ctx.drawImage(SPR.icons['sk_' + id], 16, 249);
-    drawText(ctx, 'SPACE · ' + sk.name + ': ' + sk.desc, 34, 252, COL.yellow);
+    ctx.drawImage(SPR.icons[lo.w] || SPR.icons.box, 16, 226);
+    drawText(ctx, (w.name + ': ' + w.desc).slice(0, 56), 34, 228, COL.white);
+    drawText(ctx, (def.passiveName + ': ' + def.passiveDesc).slice(0, 56), 34, 240, COL.teal);
+    ctx.drawImage(SPR.icons[sk.icon] || SPR.icons['sk_' + id], 16, 250);
+    drawText(ctx, (sk.name + ': ' + sk.desc).slice(0, 56), 34, 252, COL.yellow);
+    // sağda teknik kutucukları: üst sıra vuruşlar (Q), alt sıra yetenekler (E)
+    this.techSlots(ctx, id, 'weapons', lo.w, 392, 225);
+    this.techSlots(ctx, id, 'skills', lo.s, 392, 249);
+    drawText(ctx, 'Q', 384, 229, COL.greyLight);
+    drawText(ctx, 'E', 384, 253, COL.greyLight);
   },
 
   // ── HUD ──
@@ -467,7 +619,7 @@ const UI = {
         ctx.strokeStyle = COL.gold; ctx.lineWidth = 1;
         ctx.strokeRect(x - 1.5, wy - 2.5, 15, 15);
       }
-      ctx.drawImage(SPR.icons[w.id], x, wy - 1);
+      ctx.drawImage(SPR.icons[w.id] || SPR.icons.box, x, wy - 1);
       drawText(ctx, w.evolved ? 'E' : w.lvl, x + 13, wy + 4, w.evolved ? COL.gold : COL.white, { shadow: COL.outline });
     }
     let ix = 20 + wn * 26;
@@ -485,7 +637,8 @@ const UI = {
       const bx = 442, by = 210;
       const ready = sk.cd <= 0;
       this.panel(ctx, bx, by, 30, 30, ready ? p.def.color : COL.navy);
-      ctx.drawImage(SPR.icons['sk_' + p.charId], bx + 3, by + 3, 24, 24);
+      const skIcon = SPR.icons[SKILLS[p.skill.id].icon] || SPR.icons['sk_' + p.charId];
+      ctx.drawImage(skIcon, bx + 3, by + 3, 24, 24);
       if (!ready) {
         const h = Math.round(28 * clamp(sk.cd / ss.cd, 0, 1));
         ctx.fillStyle = 'rgba(24,20,37,0.75)';

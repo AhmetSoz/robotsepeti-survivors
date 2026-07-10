@@ -795,9 +795,189 @@ function buildIcon(id) {
       px(3, 0, 2, 3, COL.teal); px(2, 2, 4, 2, COL.teal); px(3, 4, 2, 1, COL.teal);
       px(4, 6, 7, 6, COL.outline); px(5, 7, 5, 4, COL.skinAlt); px(7, 7, 1, 4, COL.brown);
       break;
+    // ── varyant vuruş ikonları ──
+    case 'kemer': // şampiyonluk kemeri
+      px(0, 4, 12, 4, COL.gold); px(0, 5, 12, 2, COL.yellow);
+      px(4, 3, 4, 6, COL.gold); px(5, 4, 2, 4, COL.yellow); px(5, 5, 2, 2, COL.orange);
+      break;
+    case 'salto': // dönen takla oku
+      px(3, 1, 6, 2, COL.red); px(2, 2, 2, 3, COL.red); px(8, 2, 2, 3, COL.red);
+      px(2, 6, 2, 3, COL.redDark); px(8, 6, 2, 3, COL.redDark); px(3, 9, 3, 2, COL.redDark);
+      px(8, 9, 3, 1, COL.white); px(9, 8, 2, 3, COL.white);
+      break;
+    case 'korna': // korna + ses
+      px(1, 5, 4, 3, COL.gold); px(5, 4, 3, 5, COL.gold); px(8, 3, 2, 7, COL.yellow);
+      px(11, 3, 1, 2, COL.white); px(11, 6, 1, 2, COL.white); px(10, 5, 1, 1, COL.white);
+      break;
+    case 'lastik': // yanan lastik
+      px(3, 4, 6, 7, COL.outline); px(4, 5, 4, 5, COL.navyDark); px(5, 7, 2, 2, COL.greyDark);
+      px(4, 1, 2, 3, COL.orange); px(7, 0, 2, 4, COL.orange); px(6, 2, 1, 2, COL.yellow);
+      break;
+    case 'mikrofon': // mikrofon
+      px(4, 1, 4, 4, COL.greyLight); px(5, 2, 2, 2, COL.grey);
+      px(5, 5, 2, 4, COL.greyDark); px(4, 9, 4, 2, COL.navyDark);
+      px(1, 10, 3, 1, COL.grey); px(0, 8, 1, 2, COL.grey);
+      break;
+    case 'basdrop': // hoparlör
+      px(2, 1, 8, 10, COL.outline); px(3, 2, 6, 8, COL.navyDark);
+      px(4, 3, 4, 1, COL.teal); px(4, 5, 4, 4, COL.greyDark); px(5, 6, 2, 2, COL.teal);
+      px(10, 4, 1, 1, COL.teal); px(11, 6, 1, 1, COL.teal); px(10, 8, 1, 1, COL.teal);
+      break;
+    case 'soru': // uçan soru işareti
+      px(3, 1, 6, 2, COL.teal); px(8, 3, 2, 2, COL.teal);
+      px(6, 5, 2, 2, COL.teal); px(5, 7, 2, 1, COL.teal); px(5, 10, 2, 2, COL.cyan);
+      px(0, 3, 2, 1, COL.white); px(1, 6, 2, 1, COL.white);
+      break;
+    case 'gaz': // yeşil bulut
+      px(1, 5, 9, 4, COL.green); px(2, 3, 4, 2, COL.green);
+      px(6, 4, 4, 2, COL.greenDark); px(3, 5, 3, 2, COL.yellow); px(9, 9, 2, 2, COL.greenDark);
+      break;
+    case 'fatura': // fiş/fatura
+      px(3, 0, 6, 11, COL.white); px(3, 0, 6, 1, COL.greyLight);
+      px(4, 2, 4, 1, COL.greyDark); px(4, 4, 3, 1, COL.greyDark); px(4, 6, 4, 1, COL.greyDark);
+      px(4, 8, 2, 1, COL.red); px(7, 8, 1, 1, COL.red);
+      break;
+    case 'muhur': // resmi mühür
+      px(5, 0, 2, 3, COL.brown); px(4, 3, 4, 2, COL.brownDark);
+      px(3, 5, 6, 3, COL.redDark); px(3, 9, 6, 2, COL.red); px(4, 10, 4, 1, COL.pink);
+      break;
+    case 'forklift': // mini forklift
+      px(1, 2, 2, 8, COL.greyDark); px(1, 9, 4, 1, COL.greyLight);
+      px(4, 4, 7, 5, COL.gold); px(5, 5, 5, 3, COL.orange);
+      px(8, 2, 3, 3, COL.teal);
+      px(5, 9, 2, 2, COL.outline); px(9, 9, 2, 2, COL.outline);
+      break;
+    case 'kolibandi': // bant üstünde koli
+      px(1, 8, 10, 3, COL.navyDark); px(2, 9, 2, 1, COL.grey); px(6, 9, 2, 1, COL.grey);
+      px(3, 2, 6, 6, COL.outline); px(4, 3, 4, 4, COL.skinAlt); px(5, 3, 1, 4, COL.brown);
+      break;
+    // ── varyant yetenek ikonları ──
+    case 'sk_kafa': // kafa göğüs: kafa + çarpma yıldızı
+      px(3, 3, 5, 5, COL.skin); px(4, 4, 3, 3, COL.skinAlt);
+      px(9, 2, 2, 2, COL.red); px(10, 5, 2, 1, COL.red); px(9, 7, 2, 2, COL.red);
+      px(8, 4, 1, 1, COL.yellow); px(8, 6, 1, 1, COL.yellow);
+      break;
+    case 'sk_kalkan': // şampiyon duruşu: kalkan
+      px(2, 1, 8, 6, COL.teal); px(3, 2, 6, 4, COL.cyan);
+      px(3, 7, 6, 2, COL.teal); px(4, 9, 4, 1, COL.teal); px(5, 10, 2, 1, COL.cyan);
+      px(5, 3, 2, 4, COL.white);
+      break;
+    case 'sk_konvoy': // konvoy: iki araç
+      px(0, 2, 8, 3, COL.white); px(0, 4, 8, 1, COL.red); px(5, 2, 2, 1, COL.teal);
+      px(4, 7, 8, 3, COL.white); px(4, 9, 8, 1, COL.red); px(9, 7, 2, 1, COL.teal);
+      break;
+    case 'sk_yedek': // yedek araç: araç + patlama
+      px(1, 2, 7, 3, COL.white); px(1, 4, 7, 1, COL.red); px(5, 2, 2, 1, COL.teal);
+      px(8, 7, 3, 3, COL.orange); px(9, 6, 1, 1, COL.yellow); px(7, 9, 1, 1, COL.yellow);
+      px(11, 9, 1, 1, COL.yellow);
+      break;
+    case 'sk_balad': // ağır balad: nota + z z
+      px(3, 2, 2, 7, COL.purple); px(4, 2, 3, 2, COL.purple); px(1, 8, 4, 3, COL.pink);
+      px(8, 2, 3, 1, COL.teal); px(9, 3, 1, 1, COL.teal); px(8, 4, 3, 1, COL.teal);
+      px(9, 7, 2, 1, COL.cyan); px(10, 8, 1, 1, COL.cyan); px(9, 9, 2, 1, COL.cyan);
+      break;
+    case 'sk_hayran': // hayran kitlesi: kalp + notalar
+      px(2, 2, 3, 3, COL.pink); px(6, 2, 3, 3, COL.pink);
+      px(2, 5, 7, 3, COL.pink); px(4, 8, 3, 2, COL.red); px(5, 10, 1, 1, COL.red);
+      px(10, 1, 1, 3, COL.purple); px(9, 4, 2, 2, COL.purple);
+      break;
+    case 'sk_klon': // sahte can: çift silüet
+      px(2, 3, 4, 4, COL.green); px(3, 7, 2, 4, COL.greenDark);
+      px(7, 3, 4, 4, COL.greenDeep); px(8, 7, 2, 4, COL.greenDeep);
+      px(8, 4, 2, 2, COL.green);
+      break;
+    case 'sk_geger': // mega geğirti: yeşil patlama
+      px(4, 4, 4, 4, COL.yellow);
+      px(2, 2, 2, 2, COL.green); px(8, 2, 2, 2, COL.green);
+      px(2, 8, 2, 2, COL.green); px(8, 8, 2, 2, COL.green);
+      px(0, 5, 2, 2, COL.greenDark); px(10, 5, 2, 2, COL.greenDark);
+      px(5, 0, 2, 2, COL.greenDark); px(5, 10, 2, 2, COL.greenDark);
+      break;
+    case 'sk_burokrasi': // bürokrasi: evrak yığını
+      px(2, 6, 8, 5, COL.greyLight); px(3, 4, 8, 5, COL.white);
+      px(4, 5, 5, 1, COL.greyDark); px(4, 7, 4, 1, COL.greyDark);
+      px(8, 1, 3, 3, COL.redDark); px(9, 2, 1, 1, COL.red);
+      break;
+    case 'sk_butce': // bütçe kalkanı: kalkan + para
+      px(2, 1, 8, 6, COL.teal); px(3, 2, 6, 4, COL.cyan);
+      px(3, 7, 6, 2, COL.teal); px(4, 9, 4, 1, COL.teal);
+      px(4, 3, 4, 4, COL.gold); px(5, 4, 2, 2, COL.yellow);
+      break;
+    case 'sk_forkonvoy': // forklift filosu
+      px(0, 3, 5, 3, COL.gold); px(5, 4, 1, 2, COL.greyDark); px(0, 6, 1, 1, COL.outline); px(3, 6, 1, 1, COL.outline);
+      px(6, 7, 5, 3, COL.gold); px(11, 8, 1, 2, COL.greyDark); px(6, 10, 1, 1, COL.outline); px(9, 10, 1, 1, COL.outline);
+      break;
+    case 'sk_vakum': // vakum: huni + içeri oklar
+      px(3, 8, 6, 3, COL.orange); px(4, 6, 4, 2, COL.orangeDark);
+      px(0, 1, 2, 2, COL.greyLight); px(2, 3, 1, 1, COL.greyLight);
+      px(10, 1, 2, 2, COL.greyLight); px(9, 3, 1, 1, COL.greyLight);
+      px(5, 0, 2, 1, COL.greyLight); px(5, 2, 2, 1, COL.grey);
+      break;
   }
   return c;
 }
+
+// ─── Forklift aracı (sefer silahı, 30x18, sağa bakar) ────────
+function buildForkVehicle() {
+  const c = makeCanvas(30, 18);
+  const x = c.getContext('2d');
+  // gövde
+  x.fillStyle = COL.outline; x.fillRect(3, 4, 17, 10);
+  x.fillStyle = COL.gold; x.fillRect(4, 5, 15, 8);
+  x.fillStyle = COL.orange; x.fillRect(4, 9, 15, 4);
+  // kabin + sürücü koltuğu
+  x.fillStyle = COL.outline; x.fillRect(6, 0, 9, 6);
+  x.fillStyle = COL.teal; x.fillRect(7, 1, 7, 4);
+  // ikaz lambası
+  x.fillStyle = COL.red; x.fillRect(10, 0, 2, 1);
+  // çatal direği + çatallar (önde)
+  x.fillStyle = COL.greyDark; x.fillRect(21, 1, 2, 13);
+  x.fillStyle = COL.greyLight; x.fillRect(23, 11, 6, 2);
+  x.fillStyle = COL.grey; x.fillRect(23, 5, 5, 1);
+  // tekerlekler
+  for (const wx of [5, 15]) {
+    x.fillStyle = COL.outline; x.fillRect(wx, 13, 6, 5);
+    x.fillStyle = COL.navyDark; x.fillRect(wx + 1, 14, 4, 3);
+    x.fillStyle = COL.grey; x.fillRect(wx + 2, 15, 2, 1);
+  }
+  return c;
+}
+
+// ─── Kemer (fırlatılan, 11x7) ────────────────────────────────
+const KEMER_ROWS = [
+  'ooooooooooo',
+  'oGGGYYYGGGo',
+  'oGGYWWWYGGo',
+  'oGGYWWWYGGo',
+  'oGGGYYYGGGo',
+  'ooooooooooo',
+  '...........'
+];
+
+// ─── Mikrofon başı (orbit, 7x8) ──────────────────────────────
+const MIC_ROWS = [
+  '.ooooo.',
+  'oGGGGGo',
+  'oGgGgGo',
+  'oGGGGGo',
+  '.ooooo.',
+  '..oDo..',
+  '..oDo..',
+  '...o...'
+];
+
+// ─── Fatura kağıdı (mermi, 7x9) ──────────────────────────────
+const FATURA_ROWS = [
+  'WWWWWWW',
+  'WggggdW',
+  'WWWWWWW',
+  'WggdWWW',
+  'WWWWWWW',
+  'WggggdW',
+  'WWWWWWW',
+  'WRRdWWW',
+  'WWWWWWW'
+];
 
 // ─── Hepsini üret ────────────────────────────────────────────
 const SPR = {};
@@ -862,10 +1042,21 @@ function buildAllSprites() {
     ofis: [desk, plant, cooler, desk, plant, buildBoxStack()]
   };
 
+  // varyant vuruş görselleri
+  const fork = buildForkVehicle();
+  SPR.fork = { n: fork, f: flipOf(fork) };
+  SPR.kemerSpr = buildGrid(KEMER_ROWS, { o: COL.outline, G: COL.gold, Y: COL.yellow, W: COL.white });
+  SPR.micHead = buildGrid(MIC_ROWS, { o: COL.outline, G: COL.greyLight, g: COL.grey, D: COL.greyDark });
+  SPR.fatura = buildGrid(FATURA_ROWS, { W: COL.white, g: COL.greyDark, d: COL.grey, R: COL.red });
+
   SPR.icons = {};
   for (const id of ['suplex', 'car', 'wave', 'burp', 'puff', 'box', 'zimba', 'mail', 'mop',
                     'kahve', 'sigorta', 'klavye', 'miknatis', 'robotkol', 'drone', 'prim', 'enerji',
-                    'sk_ahmet', 'sk_ali', 'sk_bekir', 'sk_can', 'sk_erkan', 'sk_berker']) {
+                    'sk_ahmet', 'sk_ali', 'sk_bekir', 'sk_can', 'sk_erkan', 'sk_berker',
+                    'kemer', 'salto', 'korna', 'lastik', 'mikrofon', 'basdrop',
+                    'soru', 'gaz', 'fatura', 'muhur', 'forklift', 'kolibandi',
+                    'sk_kafa', 'sk_kalkan', 'sk_konvoy', 'sk_yedek', 'sk_balad', 'sk_hayran',
+                    'sk_klon', 'sk_geger', 'sk_burokrasi', 'sk_butce', 'sk_forkonvoy', 'sk_vakum']) {
     SPR.icons[id] = buildIcon(id);
   }
 }

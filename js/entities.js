@@ -1893,30 +1893,44 @@ function drawPlayField(ctx) {
     }
   }
 
-  // oyuncu mermileri: zımba telleri + mailler
+  // oyuncu mermileri: zımba / kemer / fatura / soru / mail
   for (const pr of Game.projs) {
     const [sx, sy] = W2S(pr.x, pr.y);
     if (pr.type === 'staple') {
       ctx.fillStyle = COL.greyLight; ctx.fillRect(sx - 1, sy - 1, 3, 2);
       ctx.fillStyle = COL.white; ctx.fillRect(sx, sy - 1, 1, 1);
+    } else if (pr.type === 'kemer') {
+      // dönen şampiyonluk kemeri
+      ctx.save();
+      ctx.translate(sx, sy);
+      ctx.rotate(pr.t * 9);
+      ctx.drawImage(SPR.kemerSpr, -5, -3);
+      ctx.restore();
+    } else if (pr.type === 'fatura') {
+      ctx.drawImage(SPR.fatura, sx - 3, sy - 4 + Math.sin(pr.t * 12) * 1);
+    } else if (pr.type === 'soru') {
+      drawText(ctx, '?', sx - 2, sy - 4, COL.teal, { shadow: COL.outline });
     } else {
       ctx.drawImage(SPR.mail, sx - 4, sy - 3);
     }
   }
 
-  // devriye paspasları
-  const mopW = p.weapons.find(w => w.id === 'mop');
-  if (mopW) {
-    const ms = weaponStats(p, mopW);
-    const mopCount = 1 + (mopW.lvl >= 4 ? 1 : 0) + (mopW.lvl >= 6 ? 1 : 0);
+  // yörünge silahları: paspas / mikrofon / koli bandı
+  for (const w of p.weapons) {
+    const def = WEAPONS[w.id];
+    if (def.kind !== 'orbit') continue;
+    const ms = weaponStats(p, w);
+    const count = def.single ? 1 : 1 + (w.lvl >= 4 ? 1 : 0) + (w.lvl >= 6 ? 1 : 0);
+    const img = def.vis === 'mic' ? SPR.micHead : (def.vis === 'koli' ? SPR.minibox : SPR.mop);
+    const lineCol = def.vis === 'mic' ? COL.greyDark : (def.vis === 'koli' ? COL.grey : COL.brown);
     const [px2, py2] = W2S(p.x, p.y);
-    for (let i = 0; i < mopCount; i++) {
-      const a = mopW.angle + (i / mopCount) * TAU;
+    for (let i = 0; i < count; i++) {
+      const a = w.angle + (i / count) * TAU;
       const mx = px2 + Math.cos(a) * ms.orbitR;
       const my = py2 - 6 + Math.sin(a) * ms.orbitR * 0.7;
-      ctx.strokeStyle = COL.brown; ctx.lineWidth = 1;
+      ctx.strokeStyle = lineCol; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(px2, py2 - 8); ctx.lineTo(mx, my); ctx.stroke();
-      ctx.drawImage(SPR.mop, Math.round(mx - 3), Math.round(my - 3));
+      ctx.drawImage(img, Math.round(mx - (img.width >> 1)), Math.round(my - (img.height >> 1)));
     }
   }
 

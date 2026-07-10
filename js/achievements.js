@@ -19,10 +19,10 @@ const ACH_DEFS = [
   { id: 'kill3',   name: 'MÜŞTERİ KABUSU',     desc: 'Toplam 25.000 müşteri devir',     key: 'kills',  scope: 'total', target: 25000, reward: { coins: 150 } },
   // ── tek koşu ──
   { id: 'combo1',  name: 'SERİ KATİP',         desc: 'Tek koşuda 25 kombo yap',         key: 'combo',  scope: 'run', mode: 'max', target: 25,  reward: { coins: 15 } },
-  { id: 'combo2',  name: 'ZİNCİR USTASI',      desc: 'Tek koşuda 50 kombo yap',         key: 'combo',  scope: 'run', mode: 'max', target: 50,  reward: { coins: 40 } },
+  { id: 'combo2',  name: 'ZİNCİR USTASI',      desc: 'Tek koşuda 50 kombo yap',         key: 'combo',  scope: 'run', mode: 'max', target: 50,  reward: { coins: 40, unlock: 't_mikrofon' } },
   { id: 'combo3',  name: 'KOMBO EFSANESİ',     desc: 'Tek koşuda 100 kombo yap',        key: 'combo',  scope: 'run', mode: 'max', target: 100, reward: { coins: 100 } },
   { id: 'surv1',   name: 'MESAİ KURDU',        desc: 'Bir koşuda 10 dakika dayan',      key: 'survive', scope: 'run', mode: 'max', target: 600,  reward: { coins: 20 } },
-  { id: 'surv2',   name: 'FAZLA MESAİCİ',      desc: 'Bir koşuda 15 dakika dayan',      key: 'survive', scope: 'run', mode: 'max', target: 900,  reward: { coins: 50 } },
+  { id: 'surv2',   name: 'FAZLA MESAİCİ',      desc: 'Bir koşuda 15 dakika dayan',      key: 'survive', scope: 'run', mode: 'max', target: 900,  reward: { coins: 50, unlock: 't_lastik' } },
   { id: 'surv3',   name: 'GECE VARDİYASI',     desc: 'Bir koşuda 20 dakika dayan',      key: 'survive', scope: 'run', mode: 'max', target: 1200, reward: { coins: 120 } },
   { id: 'lvl20',   name: 'HIZLI TERFİ',        desc: 'Tek koşuda seviye 20 ol',         key: 'level',  scope: 'run', mode: 'max', target: 20, reward: { coins: 30 } },
   { id: 'lvl30',   name: 'GENEL MÜDÜR',        desc: 'Tek koşuda seviye 30 ol',         key: 'level',  scope: 'run', mode: 'max', target: 30, reward: { coins: 80 } },
@@ -36,8 +36,8 @@ const ACH_DEFS = [
   { id: 'mis1',    name: 'GÖREV ADAMI',        desc: 'Toplam 10 görev tamamla',         key: 'missions', scope: 'total', target: 10, reward: { coins: 25 } },
   { id: 'mis2',    name: 'PERFORMANS YILDIZI', desc: 'Toplam 50 görev tamamla',         key: 'missions', scope: 'total', target: 50, reward: { coins: 100 } },
   // ── bosslar ──
-  { id: 'b_top',   name: 'TOPTAN İADE',        desc: 'Toptancıyı devir',                key: 'boss_toptanci',    scope: 'total', target: 1, reward: { coins: 20 } },
-  { id: 'b_kara',  name: 'PİYASA DÜZELDİ',     desc: 'Karaborsacıyı devir',             key: 'boss_karaborsaci', scope: 'total', target: 1, reward: { coins: 25 } },
+  { id: 'b_top',   name: 'TOPTAN İADE',        desc: 'Toptancıyı devir',                key: 'boss_toptanci',    scope: 'total', target: 1, reward: { coins: 20, unlock: 't_forklift' } },
+  { id: 'b_kara',  name: 'PİYASA DÜZELDİ',     desc: 'Karaborsacıyı devir',             key: 'boss_karaborsaci', scope: 'total', target: 1, reward: { coins: 25, unlock: 't_fatura' } },
   { id: 'b_mudur', name: 'BÖLGE TEMİZ',        desc: 'Bölge Müdürünü devir',            key: 'boss_mudur',       scope: 'total', target: 1, reward: { coins: 30 } },
   { id: 'b_rakip', name: 'REKABET KURUMU',     desc: 'Rakip CEO\'yu devir',             key: 'boss_rakip',       scope: 'total', target: 1, reward: { coins: 35 } },
   { id: 'b_pat',   name: 'İSTİFA DİLEKÇESİ',   desc: 'Büyük Patronu devir',             key: 'boss_patron',      scope: 'total', target: 1, reward: { coins: 50 } },
@@ -47,8 +47,8 @@ const ACH_DEFS = [
   { id: 'run2',    name: 'MESAİ BAĞIMLISI',    desc: '25 koşu tamamla',                 key: 'runs', scope: 'total', target: 25, reward: { coins: 75 } },
   { id: 'time1',   name: 'DEMİRBAŞ',           desc: 'Toplam 1 saat oyna',              key: 'time', scope: 'total', target: 3600, reward: { coins: 60 } },
   // ── karaktere özel ──
-  { id: 'champ',   name: 'ŞAMPİYON',           desc: 'Ahmet: 50 şampiyon vuruşu yap',   key: 'champ',  scope: 'total', target: 50, char: 'ahmet', reward: { coins: 45 } },
-  { id: 'freeze',  name: 'SORU BANKASI',       desc: 'Can: toplam 100 müşteri dondur',  key: 'freeze', scope: 'total', target: 100, char: 'can', reward: { coins: 45 } },
+  { id: 'champ',   name: 'ŞAMPİYON',           desc: 'Ahmet: 50 şampiyon vuruşu yap',   key: 'champ',  scope: 'total', target: 50, char: 'ahmet', reward: { coins: 45, unlock: 't_kemer' } },
+  { id: 'freeze',  name: 'SORU BANKASI',       desc: 'Can: toplam 100 müşteri dondur',  key: 'freeze', scope: 'total', target: 100, char: 'can', reward: { coins: 45, unlock: 't_soru' } },
   { id: 'skills',  name: 'YETENEK AVCISI',     desc: 'Toplam 100 yetenek kullan',       key: 'skillUse', scope: 'total', target: 100, reward: { coins: 55 } },
   // ── gizli ──
   { id: 'h_combo', name: 'DEPO CANAVARI',      desc: 'Tek koşuda 150 kombo yap',        key: 'combo', scope: 'run', mode: 'max', target: 150, hidden: true, reward: { coins: 200 } },
