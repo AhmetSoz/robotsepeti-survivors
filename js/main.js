@@ -9,6 +9,7 @@
   World.init();
   Input.init(canvas);
   Meta.load();
+  Achievements.load();
 
   // PWA: service worker (yalnızca http/https — yerel dosyada çalışmaz)
   if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
@@ -126,6 +127,18 @@
   if (params.get('screen') === 'shop') {
     Game.state = 'shop';
     if (params.get('tab')) UI.shopTab = parseInt(params.get('tab'), 10) || 0;
+  }
+  if (params.get('screen') === 'album') Game.state = 'album';
+  // test: başarım/istatistik doldurma — ?unlockach=kill1,combo1 ve ?achstats=kills:600,runs:7
+  if (params.get('unlockach')) {
+    for (const id of params.get('unlockach').split(',')) {
+      const a = ACH_DEFS.find(d => d.id === id);
+      if (a && !Achievements.done[a.id]) Achievements.done[a.id] = 1;
+    }
+  }
+  for (const pair of (params.get('achstats') || '').split(',')) {
+    const [k, v] = pair.split(':');
+    if (k) Achievements.stats[k] = parseInt(v || '0', 10);
   }
   if (params.get('bank')) { Meta.bank = parseInt(params.get('bank'), 10); }
   if (params.get('costume') && COSTUMES[params.get('costume')]) {

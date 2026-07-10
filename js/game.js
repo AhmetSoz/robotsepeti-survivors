@@ -21,6 +21,7 @@ const Game = {
   enemies: [], eShots: [], boxes: [], clouds: [], rings: [],
   cars: [], shocks: [], cones: [], pickups: [], parts: [], floats: [],
   projs: [], corpses: [], decals: [],
+  achQueue: [], achToast: null,
   hazards: [], eRings: [], afterimgs: [], beams: [], ambients: [],
   bossIntro: null, curZone: 'depo', roombaT: 6, sparkT: 12,
   ringT: 20, bossChestT: 0,
@@ -59,7 +60,9 @@ const Game = {
     this.pickStreak = 0; this.pickStreakT = 0;
     this.lastHurtT = 0; this.lullT = 0; this.crateT = 6; this.tickN = 0; this.banked = false;
     this.overtime = false; this.nextBossT = WIN_TIME + 90; this.bossCycleIdx = 0;
+    this.achQueue = []; this.achToast = null;
     Missions.reset();
+    Achievements.startRun();
     this.eliteT = charId === 'berker' ? 48 : 60;
     this.banner = { txt: 'MESAİ BAŞLADI! MÜŞTERİLER GELİYOR!', t: 0 };
     this.nameInput = ''; this.nameDone = false;
@@ -93,6 +96,7 @@ const Game = {
       case 'select': UI.updateSelect(); break;
       case 'scores': UI.updateScores(); break;
       case 'shop': UI.updateShop(); break;
+      case 'album': UI.updateAlbum(); break;
     }
 
     if (this.banner) {
@@ -116,6 +120,18 @@ const Game = {
     updateFx(dt);
     this.director(dt);
     Missions.update(dt);
+    Achievements.update();
+
+    // başarım toast'ı: kuyruktan sırayla, 3'er saniye altın bildirim
+    if (this.achToast) {
+      this.achToast.t += dt;
+      if (this.achToast.t > 3) this.achToast = null;
+    }
+    if (!this.achToast && this.achQueue.length) {
+      this.achToast = { a: this.achQueue.shift(), t: 0 };
+      Sfx.play('evolve');
+      this.flashT = Math.max(this.flashT, 0.2); this.flashCol = '254,174,52';
+    }
 
     // boss giriş sineması sayacı
     if (this.bossIntro) {
@@ -461,6 +477,7 @@ const Game = {
     if (evoW) {
       const ev = EVOLUTIONS[evoW.id];
       evoW.evolved = true;
+      Achievements.event('evolutions');
       this.coins += bossReward ? 15 : 5;
       this.score += Math.round(400 * p.greed);
       this.chestAnim = { t: 0, rewards: [{ name: ev.name, icon: evoW.id, evolve: true, desc: ev.desc }], evolve: true };
@@ -502,6 +519,7 @@ const Game = {
     this.score += Math.round((bossReward ? 400 : 150) * p.greed);
     this.chestAnim = { t: 0, rewards, boss: !!bossReward };
     this.state = 'chest';
+    Achievements.event('chests');
     Sfx.play('chest');
   },
 
@@ -528,6 +546,10 @@ const Game = {
     if (this.banked) return;
     this.banked = true;
     Meta.deposit(this.coins);
+    // koşu istatistikleri kalıcı sayaçlara işlenir
+    Achievements.event('runs');
+    Achievements.event('time', Math.floor(this.time));
+    Achievements.save();
   },
 
   gameOver() {
@@ -613,6 +635,7 @@ const Game = {
     if (this.state === 'select') { UI.drawSelect(ctx); return; }
     if (this.state === 'scores') { UI.drawScores(ctx); return; }
     if (this.state === 'shop') { UI.drawShop(ctx); return; }
+    if (this.state === 'album') { UI.drawAlbum(ctx); return; }
 
     // oyun sahnesi (play, levelup, chest, pause, over)
     this.camRX = this.camX + (this.shake > 0 ? rand(-this.shake, this.shake) : 0) + this.kickX;

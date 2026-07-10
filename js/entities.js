@@ -233,6 +233,8 @@ function useSkill(p) {
   const s = skillStats(p);
   p.skill.cd = s.cd;
   Game.banner = { txt: SKILLS[p.charId].name + '!', t: 2.2 };
+  Achievements.event('skillUse');
+  Achievements.run.skillUsedFlag = 1;   // "pasif direniş" gizli başarımı bozulur
 
   switch (p.charId) {
     case 'ahmet': {
@@ -276,13 +278,16 @@ function useSkill(p) {
     }
     case 'can': {
       // soru bombardımanı: ekrandaki herkes donar
+      let frozen = 0;
       for (const e of Game.enemies) {
         if (e.spawnT > 0) continue;
         if (dist2(p.x, p.y, e.x, e.y) > 320 * 320) continue;
         e.stun = Math.max(e.stun, s.dur);
         damageEnemy(e, s.dmg, 0, 0, true);
         addFloat(e.x, e.y - 14 * e.type.scale, '?', COL.yellow);
+        frozen++;
       }
+      if (frozen) Achievements.event('freeze', frozen);
       Game.flashT = 0.3; Game.flashCol = '44,232,245';
       Sfx.play('question'); Sfx.play('teleport');
       break;
@@ -434,6 +439,7 @@ function suplexPulse(s, w) {
   // her 4. vuruş ŞAMPİYON VURUŞU: daha büyük, daha sert
   if (w) w.pulseN = (w.pulseN || 0) + 1;
   const champ = w && w.pulseN % 4 === 0;
+  if (champ) Achievements.event('champ');
   const radius = s.radius * (champ ? 1.5 : 1);
   const dmg = s.dmg * (champ ? 1.6 : 1);
 
@@ -857,6 +863,7 @@ function killEnemy(e) {
   if (e.type.breakable) {
     Sfx.play('break');
     Missions.event('crates');
+    Achievements.event('crates');
     const roll = Math.random();
     if (roll < 0.28) addPickup('coin', e.x, e.y);
     else if (roll < 0.5) { for (let i = 0; i < 3; i++) addPickup('chip', e.x + rand(-8, 8), e.y + rand(-6, 6), 2); }
@@ -883,6 +890,14 @@ function killEnemy(e) {
   Missions.event('kill');
   Missions.event('combo', Game.combo);
   if (e.type.elite) Missions.event('elite');
+  // başarım sayaçları
+  Achievements.event('kills');
+  Achievements.event('killsRun');
+  Achievements.peak('combo', Game.combo);
+  if (e.type.boss) {
+    Achievements.event('boss_' + e.typeId);
+    Achievements.event('bossTotal');
+  }
   if (Game.combo >= 10 && Game.combo % 10 === 0) {
     addFloat(Game.player.x, Game.player.y - 26, 'KOMBO x' + Game.combo + '!', COL.gold, true);
     Sfx.comboTier(Game.combo / 10);

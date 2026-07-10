@@ -79,6 +79,7 @@ const Missions = {
     }
     Game.score += 200 + this.doneN * 50;
     this.doneN++;
+    Achievements.event('missions');
     this.cur = null;
     this.cooldown = 8;
     Sfx.play('mission');

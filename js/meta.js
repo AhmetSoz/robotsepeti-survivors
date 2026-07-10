@@ -73,6 +73,25 @@ const Meta = {
     this.save();
   },
 
+  // ── genel teknik kilitleri (silah/yetenek varyantları — Faz 1) ──
+  // Hem başarım ödülü hem dükkân satın alımı aynı kapıya düşer.
+  unlocked(id) { return !!(this.data.unlocks && this.data.unlocks[id]); },
+
+  grantUnlock(id) {
+    if (!this.data.unlocks) this.data.unlocks = {};
+    if (this.data.unlocks[id]) return false;
+    this.data.unlocks[id] = 1;
+    this.save();
+    return true;
+  },
+
+  buyUnlock(id, cost) {
+    if (this.unlocked(id) || this.bank < cost) return false;
+    this.bank -= cost;
+    this.grantUnlock(id);
+    return true;
+  },
+
   // silah kilidi: meta yükseltmesi gerektiren silahlar
   weaponUnlocked(wid) {
     for (const id in META_UPGRADES) {

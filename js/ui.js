@@ -47,7 +47,7 @@ const UI = {
       if (w.x > 500) Game.bgWalkers.splice(i, 1);
     }
 
-    const items = 5;
+    const items = 6;
     this.navVertical(items);
     const hit = this.titleMenuHit();
     if (hit >= 0) Game.menuIdx = hit;
@@ -59,15 +59,16 @@ const UI = {
         Game.state = 'select'; Game.selIdx = 0;
       }
       else if (Game.menuIdx === 1) { Game.state = 'shop'; Game.menuIdx = 0; }
-      else if (Game.menuIdx === 2) { Game.state = 'scores'; Game.fetchScores(); }
-      else if (Game.menuIdx === 3) { isFullscreen() ? exitFullscreen() : goFullscreen(); }
+      else if (Game.menuIdx === 2) { Game.state = 'album'; Game.menuIdx = 0; }
+      else if (Game.menuIdx === 3) { Game.state = 'scores'; Game.fetchScores(); }
+      else if (Game.menuIdx === 4) { isFullscreen() ? exitFullscreen() : goFullscreen(); }
       else { Sfx.setMute(!Sfx.muted); }
     }
   },
 
   titleMenuHit() {
-    for (let i = 0; i < 5; i++) {
-      if (Input.mouseIn(160, 166 + i * 15 - 4, 160, 13)) return i;
+    for (let i = 0; i < 6; i++) {
+      if (Input.mouseIn(160, 162 + i * 14 - 3, 160, 12)) return i;
     }
     return -1;
   },
@@ -127,12 +128,15 @@ const UI = {
     }
 
     // menü
-    const labels = ['BAŞLA', 'DÜKKAN', 'SKOR TABLOSU',
+    const achN = Achievements.countDone();
+    const labels = ['BAŞLA', 'DÜKKAN',
+      'ALBÜM (' + achN + '/' + ACH_DEFS.length + ')',
+      'SKOR TABLOSU',
       'TAM EKRAN: ' + (isFullscreen() ? 'AÇIK' : 'KAPALI'),
       'SES: ' + (Sfx.muted ? 'KAPALI' : 'AÇIK')];
     for (let i = 0; i < labels.length; i++) {
       const sel = Game.menuIdx === i;
-      const y = 166 + i * 15;
+      const y = 162 + i * 14;
       if (sel) {
         drawText(ctx, '>', 240 - textW(labels[i]) / 2 - 14, y, COL.yellow, { shadow: COL.outline });
       }
@@ -244,6 +248,73 @@ const UI = {
       }
       drawText(ctx, 'ENTER: SATIN AL / GİY · A/D: SEKME · ESC: GERİ', 240, 250, COL.greyLight, { align: 'center' });
     }
+  },
+
+  // ── ALBÜM: başarımlar + istatistikler ──
+  updateAlbum() {
+    if (Input.back()) { Game.state = 'title'; Game.menuIdx = 0; return; }
+    this.navVertical(ACH_DEFS.length);
+    // dokunma/tekerlek yerine: tıklanan satır seçilir
+    for (let r = 0; r < 8; r++) {
+      if (Input.mouseIn(30, 62 + r * 22, 420, 20) && Input.mouse.clicked) {
+        const first = clamp(Game.menuIdx - 3, 0, Math.max(0, ACH_DEFS.length - 8));
+        Game.menuIdx = clamp(first + r, 0, ACH_DEFS.length - 1);
+      }
+    }
+    if (Input.confirm()) { Game.state = 'title'; Game.menuIdx = 0; }
+  },
+
+  drawAlbum(ctx) {
+    World.drawFloor(ctx, 777, 333, Game.uiT);
+    this.dim(ctx, 0.75);
+    const doneN = Achievements.countDone();
+    drawText(ctx, 'ALBÜM', 240, 8, COL.gold, { align: 'center', scale: 2, shadow: COL.outline });
+    drawText(ctx, doneN + '/' + ACH_DEFS.length + ' BAŞARIM', 240, 26, COL.greyLight, { align: 'center' });
+
+    // istatistik şeridi
+    const st = Achievements.stats;
+    drawText(ctx, 'DEVRİLEN: ' + (st.kills || 0), 36, 40, COL.grey);
+    drawText(ctx, 'KOŞU: ' + (st.runs || 0), 176, 40, COL.grey);
+    drawText(ctx, 'SÜRE: ' + fmtTime(st.time || 0), 268, 40, COL.grey);
+    drawText(ctx, 'BOSS: ' + (st.bossTotal || 0), 390, 40, COL.grey);
+
+    // kaydırmalı başarım listesi (8 satırlık pencere)
+    const first = clamp(Game.menuIdx - 3, 0, Math.max(0, ACH_DEFS.length - 8));
+    for (let r = 0; r < 8 && first + r < ACH_DEFS.length; r++) {
+      const a = ACH_DEFS[first + r];
+      const open = !!Achievements.done[a.id];
+      const sel = Game.menuIdx === first + r;
+      const y = 62 + r * 22;
+      this.panel(ctx, 30, y, 420, 20, sel ? COL.yellow : (open ? COL.gold : COL.navy));
+      // durum kutusu
+      ctx.fillStyle = open ? COL.gold : COL.navyDark;
+      ctx.fillRect(36, y + 6, 8, 8);
+      if (open) { ctx.fillStyle = COL.outline; ctx.fillRect(38, y + 8, 4, 4); }
+      if (a.hidden && !open) {
+        drawText(ctx, '???', 52, y + 3, COL.greyDark);
+        drawText(ctx, 'GİZLİ BAŞARIM', 52, y + 12, COL.navy);
+      } else {
+        drawText(ctx, a.name, 52, y + 3, open ? COL.gold : (sel ? COL.yellow : COL.white));
+        drawText(ctx, a.desc, 52, y + 12, COL.grey);
+        // ilerleme / ödül
+        if (open) {
+          drawText(ctx, 'TAMAM', 444, y + 7, COL.green, { align: 'right' });
+        } else {
+          const cur = Achievements.progressOf(a);
+          drawText(ctx, cur + '/' + a.target, 444, y + 3, COL.greyLight, { align: 'right' });
+          if (a.reward && a.reward.coins) {
+            drawText(ctx, '+' + a.reward.coins + ' PARA', 444, y + 12, COL.gold, { align: 'right' });
+          }
+        }
+      }
+    }
+    // kaydırma ipucu
+    if (ACH_DEFS.length > 8) {
+      const k = Game.menuIdx / (ACH_DEFS.length - 1);
+      ctx.fillStyle = COL.navyDark; ctx.fillRect(456, 62, 3, 174);
+      ctx.fillStyle = COL.grey; ctx.fillRect(456, 62 + Math.round(k * 160), 3, 14);
+    }
+    drawText(ctx, 'W/S: GEZİN · ESC: GERİ', 240, 250, COL.greyLight, { align: 'center' });
   },
 
   // ── KARAKTER SEÇİMİ ──
@@ -431,6 +502,23 @@ const UI = {
         ctx.fillRect(bx + 2 + i * 6, by + 32, 4, 2);
       }
       drawText(ctx, 'SPACE', bx + 15, by - 9, ready ? COL.yellow : COL.greyDark, { align: 'center' });
+    }
+
+    // başarım toast'ı: üstten süzülen altın bildirim
+    if (Game.achToast) {
+      const t = Game.achToast.t;
+      const a = Game.achToast.a;
+      const slide = t < 0.25 ? (1 - t / 0.25) * -30 : (t > 2.6 ? (t - 2.6) / 0.4 * -30 : 0);
+      const y = 40 + slide;
+      const txt = 'BAŞARIM: ' + a.name + '!';
+      const sub = a.reward && a.reward.coins ? a.desc + ' (+' + a.reward.coins + ' PARA)' : a.desc;
+      const tw = Math.max(textW(txt), textW(sub)) + 20;
+      ctx.save();
+      ctx.globalAlpha = clamp(3 - t, 0, 1);
+      this.panel(ctx, 240 - tw / 2, y, tw, 26, COL.gold);
+      drawText(ctx, txt, 240, y + 4, COL.gold, { align: 'center', shadow: COL.outline });
+      drawText(ctx, sub, 240, y + 15, COL.greyLight, { align: 'center' });
+      ctx.restore();
     }
 
     // ── dokunmatik HUD (mobil) ──
@@ -695,6 +783,19 @@ const UI = {
     drawText(ctx, 'SKOR', 142, 146, COL.gold);
     drawText(ctx, Game.displayScore(), 338, 142, COL.gold, { align: 'right', scale: 2, shadow: COL.outline });
     drawText(ctx, '+' + Game.coins + ' PARA BANKAYA YATTI (DÜKKAN)', 240, 164, COL.gold, { align: 'center' });
+
+    // bu koşuda açılan başarımlar + sıradaki hedef (bir daha oynat!)
+    if (Achievements.runUnlocked.length) {
+      const names = Achievements.runUnlocked.slice(0, 3).map(a => a.name).join(' · ');
+      drawText(ctx, 'AÇILDI: ' + names, 240, 178, COL.gold, { align: 'center', shadow: COL.outline });
+    } else {
+      const g = Achievements.nextGoal();
+      if (g) {
+        const cur = Achievements.progressOf(g);
+        drawText(ctx, 'SONRAKİ HEDEF: ' + g.name + ' (' + cur + '/' + g.target + ')',
+          240, 178, COL.teal, { align: 'center' });
+      }
+    }
 
     const cursor = ((Game.uiT * 3) | 0) % 2 ? '_' : ' ';
     drawText(ctx, 'ADIN: ' + Game.nameInput + cursor, 240, 196, COL.yellow, { align: 'center', shadow: COL.outline });
