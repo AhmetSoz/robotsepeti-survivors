@@ -1750,6 +1750,7 @@ function drawPlayField(ctx) {
   for (const sh of Game.shocks) {
     const [sx, sy] = W2S(sh.x, sh.y);
     const pr = sh.r * Math.min(1, sh.t / 0.22);
+    if (pr <= 0) continue;   // gecikmeli halka (t<0) henüz görünmez — negatif yarıçap çizilmez
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     ctx.globalAlpha = (1 - sh.t / 0.3) * 0.35;
