@@ -13,6 +13,15 @@ const Input = {
   init(canvas) {
     window.addEventListener('keydown', e => {
       Sfx.init();
+      // isim kutusuna yazılıyorsa: sadece Enter/Escape oyuna geçsin,
+      // harfler oyun tuşu sayılmasın (R = tekrar başlat kazası olmasın)
+      const inName = e.target && e.target.id === 'nameBox';
+      if (inName) {
+        if (!e.repeat && ['Enter', 'NumpadEnter', 'Escape'].includes(e.code)) {
+          this.pressed[e.code] = true;
+        }
+        return;
+      }
       if (!e.repeat) { this.keys[e.code] = true; this.pressed[e.code] = true; }
       if (e.key && e.key.length === 1) this.typed.push(e.key);
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();

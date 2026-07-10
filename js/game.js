@@ -25,7 +25,7 @@ const Game = {
   slowT: 0, slowK: 1, decoy: null,
   hazards: [], eRings: [], afterimgs: [], beams: [], ambients: [],
   bossIntro: null, curZone: 'depo', roombaT: 6, sparkT: 12,
-  ringT: 20, bossChestT: 0,
+  ringT: 20, bossChestT: 0, t2Seen: false, t3Seen: false,
   spawnAcc: 0, eliteT: 60, hordeT: 120, bossIdx: 0, bossAlive: false, hordeN: 0,
   banner: null, flashT: 0, flashCol: '255,255,255',
   combo: 0, comboT: 0, comboBest: 0,
@@ -53,7 +53,7 @@ const Game = {
     this.projs = []; this.corpses = []; this.decals = [];
     this.hazards = []; this.eRings = []; this.afterimgs = []; this.beams = []; this.ambients = [];
     this.bossIntro = null; this.curZone = 'depo'; this.roombaT = 6; this.sparkT = 12;
-    this.ringT = 20; this.bossChestT = 0;
+    this.ringT = 20; this.bossChestT = 0; this.t2Seen = false; this.t3Seen = false;
     this.spawnAcc = 0; this.hordeT = 120; this.bossIdx = 0; this.bossAlive = false; this.hordeN = 0;
     this.flashT = 0;
     this.combo = 0; this.comboT = 0; this.comboBest = 0;
@@ -277,7 +277,8 @@ const Game = {
         for (let i = 0; i < n; i++) {
           const a = (i / n) * TAU + rand(0.25);
           const id = i % 6 === 0 ? 'kuponcu' : (i % 4 === 0 ? 'kararsiz' : 'aceleci');
-          spawnEnemy(id, this.player.x + Math.cos(a) * 235, this.player.y + Math.sin(a) * 235);
+          spawnEnemy(id, this.player.x + Math.cos(a) * 235, this.player.y + Math.sin(a) * 235,
+            this.tierRoll(id));
         }
       }
     }
@@ -311,15 +312,16 @@ const Game = {
         this.banner = { txt: 'MÜŞTERİ AKINI!', t: 0 };
         for (let i = 0; i < n; i++) {
           const a = (i / n) * TAU;
-          spawnEnemy('aceleci', p.x + Math.cos(a) * 260, p.y + Math.sin(a) * 260);
+          spawnEnemy('aceleci', p.x + Math.cos(a) * 260, p.y + Math.sin(a) * 260,
+            this.tierRoll('aceleci'));
         }
       } else if (pat === 1) {
         // duvar: tek taraftan hat
         this.banner = { txt: 'OTOBÜS DOLUSU MÜŞTERİ GELDİ!', t: 0 };
         const dir = Math.random() < 0.5 ? 1 : -1;
         for (let i = 0; i < n; i++) {
-          spawnEnemy(i % 4 === 0 ? 'kuponcu' : 'aceleci',
-            p.x + dir * (270 + rand(40)), p.y + (i - n / 2) * 22);
+          const id = i % 4 === 0 ? 'kuponcu' : 'aceleci';
+          spawnEnemy(id, p.x + dir * (270 + rand(40)), p.y + (i - n / 2) * 22, this.tierRoll(id));
         }
       } else {
         // kıskaç: iki karşı köşe
@@ -327,8 +329,8 @@ const Game = {
         for (let i = 0; i < n; i++) {
           const side = i % 2 ? 1 : -1;
           const a = rand(TAU / 6) - TAU / 12 + (side > 0 ? 0 : Math.PI);
-          spawnEnemy(i % 5 === 0 ? 'kararsiz' : 'aceleci',
-            p.x + Math.cos(a) * 270, p.y + Math.sin(a) * 270);
+          const id = i % 5 === 0 ? 'kararsiz' : 'aceleci';
+          spawnEnemy(id, p.x + Math.cos(a) * 270, p.y + Math.sin(a) * 270, this.tierRoll(id));
         }
       }
     }
@@ -344,11 +346,13 @@ const Game = {
       Sfx.play('boss');
       this.shake = Math.max(this.shake, 4);
     }
-    // fazla mesai boss döngüsü: sırayla, giderek güçlenerek geri gelirler
+    // fazla mesai boss döngüsü: sırayla, her turda daha da güçlenerek dönerler
     if (t >= this.nextBossT) {
       this.nextBossT = t + BOSS_CYCLE_GAP;
       const id = BOSS_POOL[this.bossCycleIdx++ % BOSS_POOL.length];
       const boss = this.spawnAt(id);
+      const lap = Math.ceil(this.bossCycleIdx / BOSS_POOL.length);
+      boss.hp = boss.maxHp = Math.round(boss.hp * (1 + 0.25 * lap));
       this.bossAlive = true;
       this.banner = { txt: ENEMY_TYPES[id].name + ' GERİ DÖNDÜ! DAHA DA ÖFKELİ!', t: 0 };
       this.bossIntro = { t: 0, name: ENEMY_TYPES[id].name };
@@ -375,10 +379,31 @@ const Game = {
     }
   },
 
+  // Kademe zarı: süre ilerledikçe KIDEMLİ (T2) ve EFSANE (T3) müşteriler karışır.
+  // 9. dakikadan sonra T2, 19. dakikadan sonra T3 gelmeye başlar — sonsuz tırmanış.
+  tierRoll(typeId) {
+    const d = ENEMY_TYPES[typeId];
+    if (d.boss || d.elite || d.breakable) return 1;
+    const t = this.time;
+    if (Math.random() >= clamp((t - 540) / 500, 0, 0.8)) return 1;
+    const tier = Math.random() < clamp((t - 1140) / 600, 0, 0.7) ? 3 : 2;
+    if (tier === 2 && !this.t2Seen) {
+      this.t2Seen = true;
+      this.banner = { txt: 'KIDEMLİ MÜŞTERİLER GELDİ! (ALTIN ÜNİFORMA)', t: 0 };
+      Sfx.play('akin');
+    } else if (tier === 3 && !this.t3Seen) {
+      this.t3Seen = true;
+      this.banner = { txt: 'EFSANE MÜŞTERİLER SAHADA! ÇOK DİKKAT!', t: 0 };
+      Sfx.play('boss');
+    }
+    return tier;
+  },
+
   spawnAt(typeId) {
     const a = rand(TAU);
     const r = 280 + rand(40);
-    return spawnEnemy(typeId, this.player.x + Math.cos(a) * r, this.player.y + Math.sin(a) * r);
+    return spawnEnemy(typeId, this.player.x + Math.cos(a) * r, this.player.y + Math.sin(a) * r,
+      this.tierRoll(typeId));
   },
 
   // ── seviye atlama ──
@@ -582,6 +607,7 @@ const Game = {
   gameOver() {
     this.state = 'over';
     this.won = false;
+    this.overT = this.uiT;   // ölüm anındaki dokunuşlar ekranı kapatmasın
     this.nameInput = this.player.def.name;
     this.bankCoins();
     Sfx.play('over');
@@ -601,6 +627,7 @@ const Game = {
     // her durumda yerel kopya tut (internet yoksa skor kaybolmasın)
     this.saveLocal(entry);
     this.state = 'scores';
+    this.scoresT = this.uiT;   // kayıt sonrası yanlışlıkla anında kapanmasın
     if (!SCORES_REMOTE) { this.scoresState = 'ok'; return; }
     // buluta gönder: dönüşte ortak tabloyu ve sıramızı al
     this.scoresState = 'saving';

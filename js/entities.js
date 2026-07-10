@@ -10,7 +10,20 @@ const EVO_MODS = {
   wave:   s => { s.maxR *= 1.5; s.dmg *= 1.8; },
   burp:   s => { s.arc = TAU; s.range *= 1.3; s.dmg *= 1.8; },
   puff:   s => { s.radius *= 1.8; s.dps *= 1.8; s.dur *= 1.6; s.maxClouds = 1; },
-  box:    s => { s.dmg *= 1.6; s.splash *= 1.5; }
+  box:    s => { s.dmg *= 1.6; s.splash *= 1.5; },
+  // varyant vuruşların evrimleri
+  kemer:     s => { s.cd *= 0.7; s.dmg *= 1.7; s.spd += 40; },
+  salto:     s => { s.arc += 0.5; s.range *= 1.3; s.dmg *= 1.7; },
+  korna:     s => { s.maxR *= 1.5; s.dmg *= 1.7; s.kb *= 1.3; },
+  lastik:    s => { s.radius *= 1.5; s.dps *= 1.7; s.dur *= 1.4; },
+  mikrofon:  s => { s.dmg *= 1.8; s.orbitR += 8; s.rot *= 1.3; },
+  basdrop:   s => { s.radius *= 1.5; s.dmg *= 1.8; s.cd *= 0.8; },
+  soru:      s => { s.count += 2; s.dmg *= 1.5; },
+  gaz:       s => { s.radius *= 1.6; s.dps *= 1.7; },
+  fatura:    s => { s.cd *= 0.6; s.dmg *= 1.5; s.pierce += 3; },
+  muhur:     s => { s.dmg *= 1.7; s.splash *= 1.5; },
+  forklift:  s => { s.cd *= 0.55; s.dmg *= 1.7; },
+  kolibandi: s => { s.dmg *= 1.7; s.rot *= 1.4; s.orbitR += 6; }
 };
 
 function makeWeapon(id) {
@@ -535,8 +548,10 @@ function suplexPulse(s, w) {
   const dmg = s.dmg * (champ ? 1.6 : 1);
   const baseCol = def && def.col ? COL[def.col] : undefined;
 
-  Game.shocks.push({ x: cx, y: cy - 6, r: radius, t: 0, col: champ ? COL.gold : baseCol });
-  Game.decals.push({ x: cx, y: cy, r: radius * 0.7, t: 0, dur: champ ? 3 : 1.8 });
+  // evrimleşmiş vuruş: altın şok + daha büyük ve kalıcı zemin çatlağı
+  const evo = w && w.evolved;
+  Game.shocks.push({ x: cx, y: cy - 6, r: radius, t: 0, col: champ || evo ? COL.gold : baseCol });
+  Game.decals.push({ x: cx, y: cy, r: radius * (evo ? 1.0 : 0.7), t: 0, dur: champ || evo ? 3 : 1.8 });
   Game.shake = Math.max(Game.shake, champ ? 4 : 2);
   Game.kickY = Math.min(4, Game.kickY + (champ ? 3 : 1.5));
   Sfx.play(champ ? 'bigslam' : 'suplex');
@@ -582,7 +597,7 @@ function fireCar(s, w) {
     Game.cars.push({
       x: p.x - d * (280 + stag), y: p.y + lanes[laneIdx++ % lanes.length] + rand(-4, 4),
       dir: d, spd: vis === 'fork' ? 210 : 250, dmg: s.dmg, kb: s.kb, band: s.band,
-      hit: new Set(), life: 3 + stag / 250, vis
+      hit: new Set(), life: 3 + stag / 250, vis, evo: w.evolved
     });
   };
   mk(dir);
@@ -600,7 +615,7 @@ function fireWave(s, w) {
   const stun = w.evolved ? 0.3 : 0;
   const kb = s.kb || 60;
   const mk = delay => Game.rings.push({ x: p.x, y: p.y - 6, r: 6, maxR: s.maxR, dmg: s.dmg,
-    hit: new Set(), delay, stun, kb, col });
+    hit: new Set(), delay, stun, kb, col, evo: w.evolved });
   mk(0);
   if (lvl >= 4) mk(0.18);
   if (lvl >= 6) mk(0.36);
@@ -616,7 +631,7 @@ function fireBurp(s, w) {
   if (!fx && !fy) fx = 1;
   const ang = Math.atan2(fy, fx);
   Sfx.play(def === WEAPONS.salto ? 'dash' : 'burp');
-  Game.cones.push({ x: p.x, y: p.y - 6, ang, range: s.range, arc: s.arc, t: 0, col });
+  Game.cones.push({ x: p.x, y: p.y - 6, ang, range: s.range, arc: s.arc, t: 0, col, evo: w && w.evolved });
   for (const e of Game.enemies) {
     const d2 = dist2(p.x, p.y, e.x, e.y);
     if (d2 > s.range * s.range) continue;
@@ -650,7 +665,7 @@ function firePuff(s, w) {
     cx = p.x + fx * 16 + rand(-6, 6); cy = p.y + fy * 16 + rand(-6, 6);
   }
   Game.clouds.push({ x: cx, y: cy, r: s.radius, dur: s.dur, t: 0, dps: s.dps, tick: 0,
-    follow: w.evolved && !def.trail, col });
+    follow: w.evolved && !def.trail, col, evo: w.evolved, wid: w.id });
   while (Game.clouds.length > s.maxClouds + 1) Game.clouds.shift();
 }
 
@@ -670,7 +685,8 @@ function fireBox(s, w) {
     else { const a = rand(TAU); tx = p.x + Math.cos(a) * rand(40, 80); ty = p.y + Math.sin(a) * rand(40, 80); }
     // evrimleşmişse koliler gökten (drone filosundan) düşer
     Game.boxes.push({ x0: p.x, y0: p.y - 10, tx, ty, t: 0, dur: 0.5, dmg: s.dmg, splash: s.splash,
-      sky: w.evolved, stun: WEAPONS[w.id].stun || 0, vis: w.id === 'muhur' ? 'muhur' : 'box' });
+      sky: w.evolved, stun: (WEAPONS[w.id].stun || 0) * (w.evolved ? 2 : 1),
+      vis: w.id === 'muhur' ? 'muhur' : 'box', evo: w.evolved });
   }
 }
 
@@ -692,7 +708,7 @@ function fireZimba(s, w) {
     const a = ang + (i - (count - 1) / 2) * 0.14;
     Game.projs.push({ type: def.vis || 'staple', x: p.x, y: p.y - 8,
       vx: Math.cos(a) * s.spd, vy: Math.sin(a) * s.spd,
-      dmg: s.dmg, pierce: Math.round(s.pierce), hit: new Set(), t: 0,
+      dmg: s.dmg, pierce: Math.round(s.pierce), hit: new Set(), t: 0, evo: w.evolved,
       // bumerang (kemer): menzile gidince geri döner, dönüşte yeniden vurur
       boom: def.boom ? { ox: p.x, oy: p.y - 8, out: 0.55, back: false } : null });
   }
@@ -709,7 +725,7 @@ function fireMail(s, w) {
     const a = rand(TAU);
     Game.projs.push({ type: def.vis || 'mail', x: p.x, y: p.y - 10,
       vx: Math.cos(a) * 60, vy: Math.sin(a) * 60,
-      spd: s.spd, dmg: s.dmg, target: pick(targets), t: 0, homing: true });
+      spd: s.spd, dmg: s.dmg, target: pick(targets), t: 0, homing: true, evo: w.evolved });
   }
 }
 
@@ -721,6 +737,11 @@ function updateMop(w, s, dt) {
   for (let i = 0; i < count; i++) {
     const a = w.angle + (i / count) * TAU;
     const mx = p.x + Math.cos(a) * s.orbitR, my = p.y - 6 + Math.sin(a) * s.orbitR * 0.7;
+    // evrimleşmiş yörünge: altın parıltı izi bırakır
+    if (w.evolved && Math.random() < 3 * dt) {
+      addPart({ x: mx, y: my, vx: rand(-8, 8), vy: -rand(4, 14),
+        dur: 0.3, type: 'spark', col: pick([COL.gold, COL.yellow]) });
+    }
     for (const e of Game.enemies) {
       if (e.spawnT > 0 || e.mopCd > 0) continue;
       const r = 7 + 5 * e.type.scale;
@@ -763,6 +784,11 @@ function updateWeaponEntities(dt) {
     if (c.skidT <= 0) {
       c.skidT = 0.05;
       Game.decals.push({ type: 'skid', x: c.x - c.dir * 10, y: c.y + 2, dir: c.dir, t: 0, dur: 2.2 });
+    }
+    // altın konvoy: arkasından parıltı saçar
+    if (c.evo && Math.random() < 8 * dt) {
+      addPart({ x: c.x - c.dir * rand(4, 14), y: c.y - rand(2, 12), vx: -c.dir * 20, vy: -rand(5, 20),
+        dur: 0.35, type: 'spark', col: pick([COL.gold, COL.yellow]) });
     }
     for (const e of Game.enemies) {
       if (c.hit.has(e.id)) continue;
@@ -814,6 +840,14 @@ function updateWeaponEntities(dt) {
       }
       addPart({ x: cl.x + rand(-cl.r, cl.r) * 0.6, y: cl.y + rand(-cl.r, cl.r) * 0.4,
         vx: rand(-6, 6), vy: -rand(4, 12), dur: 0.9, type: 'puff', col: cl.col || COL.grey, size: 4 });
+      // evrim: tipine göre ekstra efekt (alev / asit baloncuğu / yoğun sis)
+      if (cl.evo) {
+        const ecol = cl.wid === 'lastik' ? pick([COL.orange, COL.red, COL.yellow])
+                   : (cl.wid === 'gaz' ? pick([COL.green, COL.greenDark]) : COL.white);
+        addPart({ x: cl.x + rand(-cl.r, cl.r) * 0.5, y: cl.y + rand(-cl.r, cl.r) * 0.3,
+          vx: rand(-8, 8), vy: -rand(14, 30), dur: 0.5,
+          type: cl.wid === 'lastik' ? 'spark' : 'puff', col: ecol, size: 3 });
+      }
     }
     if (cl.t > cl.dur) Game.clouds.splice(i, 1);
   }
@@ -823,7 +857,8 @@ function updateWeaponEntities(dt) {
     const b = Game.boxes[i];
     b.t += dt;
     if (b.t >= b.dur) {
-      // yere indi: alan hasarı
+      // yere indi: alan hasarı (evrimde altın şok halkası)
+      if (b.evo) Game.shocks.push({ x: b.tx, y: b.ty - 2, r: b.splash, t: 0, col: COL.gold });
       for (const e of Game.enemies) {
         if (dist2(b.tx, b.ty, e.x, e.y) < b.splash * b.splash) {
           const a = Math.atan2(e.y - b.ty, e.x - b.tx);
@@ -887,6 +922,11 @@ function updateWeaponEntities(dt) {
       }
     }
     pr.x += pr.vx * dt; pr.y += pr.vy * dt;
+    // evrim: altın parıltı izi
+    if (pr.evo && Math.random() < 10 * dt) {
+      addPart({ x: pr.x, y: pr.y, vx: rand(-10, 10), vy: rand(-10, 10),
+        dur: 0.3, type: 'spark', col: pick([COL.gold, COL.yellow]) });
+    }
     // uçuş izi
     if (Math.random() < (pr.homing ? 0.35 : 0.2)) {
       addPart({ x: pr.x, y: pr.y, vx: rand(-5, 5), vy: rand(-5, 5), dur: 0.25,
@@ -913,16 +953,27 @@ function updateWeaponEntities(dt) {
 }
 
 // ── Düşmanlar ──
-function spawnEnemy(typeId, x, y) {
+// Kademe (tier) statları: gelişmiş "kostümlü" müşteri versiyonları.
+// T2 KIDEMLİ (altın üniforma), T3 EFSANE (karanlık takım + öfke).
+const TIER_MODS = {
+  2: { hp: 1.6, dmg: 1.35, spd: 1.12, xp: 2, score: 2, armor: 1, cd: 0.85 },
+  3: { hp: 2.6, dmg: 1.8, spd: 1.22, xp: 4, score: 4, armor: 2, cd: 0.7, rage: true }
+};
+
+function spawnEnemy(typeId, x, y, tier) {
   const t = ENEMY_TYPES[typeId];
   const hpMul = 1 + Game.time / 60 * 0.42 + Math.max(0, (Game.time - 420) / 60 * 0.5);
+  const tm = TIER_MODS[tier] || null;
   const e = {
     id: nextEntityId++,
     typeId, type: t,
     x, y,
-    hp: t.breakable ? t.hp : t.hp * (t.boss || t.elite ? hpMul * 0.8 + 0.2 : hpMul),
+    tier: tm ? tier : 1,
+    dmgK: tm ? tm.dmg : 1, xpK: tm ? tm.xp : 1, scoreK: tm ? tm.score : 1,
+    armorX: tm ? tm.armor : 0, cdK: tm ? tm.cd : 1, raged: false,
+    hp: t.breakable ? t.hp : t.hp * (t.boss || t.elite ? hpMul * 0.8 + 0.2 : hpMul) * (tm ? tm.hp : 1),
     maxHp: 0,
-    spd: t.speed * rand(0.9, 1.1),
+    spd: t.speed * rand(0.9, 1.1) * (tm ? tm.spd : 1),
     flip: false, animT: rand(1),
     kx: 0, ky: 0, stun: 0, flash: 0, popT: 0, bounceT: 0,
     wanderT: rand(TAU), shotCd: rand(1, 3), droneCd: 0,
@@ -946,7 +997,8 @@ function spawnEnemy(typeId, x, y) {
 function damageEnemy(e, dmg, kx, ky, silent) {
   const p = Game.player;
   if (e.spawnT > 0) return;   // henüz sahaya inmedi
-  if (e.type.armor) dmg = Math.max(1, dmg - e.type.armor);
+  const armor = (e.type.armor || 0) + (e.armorX || 0);
+  if (armor) dmg = Math.max(1, dmg - armor);
   // kritik vuruş (robot kol şansı artırır)
   let crit = false;
   if (!silent && Math.random() < (p.crit || 0)) {
@@ -973,6 +1025,13 @@ function damageEnemy(e, dmg, kx, ky, silent) {
     Game.shake = Math.max(Game.shake, 4);
     Sfx.play('boss');
   }
+  // EFSANE (T3) müşteri öfkesi: canı yarıya inince kalıcı hızlanır
+  if (e.tier === 3 && !e.raged && e.hp > 0 && e.hp < e.maxHp * 0.5) {
+    e.raged = true;
+    e.spd *= 1.4;
+    e.flash = 0.25;
+    addFloat(e.x, e.y - 16 * e.type.scale, 'ÖFKELENDİ!', COL.red);
+  }
   if (!silent) {
     const big = crit || dmg >= 30;
     addFloat(e.x + rand(-4, 4), e.y - 14 * e.type.scale, Math.round(dmg) + (crit ? '!' : ''),
@@ -987,7 +1046,7 @@ function killEnemy(e) {
   const idx = Game.enemies.indexOf(e);
   if (idx < 0) return;
   Game.enemies.splice(idx, 1);
-  Game.score += Math.round(e.type.score * Game.player.greed * Game.scoreMul());
+  Game.score += Math.round(e.type.score * (e.scoreK || 1) * Game.player.greed * Game.scoreMul());
 
   // kırılabilir nesne: ödül düşür, kıymık saç
   if (e.type.breakable) {
@@ -1036,20 +1095,20 @@ function killEnemy(e) {
 
   // ceset animasyonu (yere serilip kaybolur)
   if (Game.corpses.length > 40) Game.corpses.shift();
-  Game.corpses.push({ typeId: e.typeId, x: e.x, y: e.y, flip: e.flip,
+  Game.corpses.push({ typeId: e.typeId, x: e.x, y: e.y, flip: e.flip, tier: e.tier,
     scale: e.type.big ? e.type.sprScale : e.type.scale, t: 0 });
 
   // kalabalık aile: veletlere bölünür
   if (e.type.split) {
     for (let i = 0; i < e.type.split.n; i++) {
-      const c = spawnEnemy(e.type.split.id, e.x + rand(-12, 12), e.y + rand(-8, 8));
+      const c = spawnEnemy(e.type.split.id, e.x + rand(-12, 12), e.y + rand(-8, 8), e.tier);
       c.spawnT = 0.25;
     }
     addFloat(e.x, e.y - 20, 'ÇOCUKLAR!', COL.teal);
   }
 
-  // XP çipi (6. dakikadan sonra altın görünür)
-  addPickup('chip', e.x, e.y, Math.round(e.type.xp * Game.player.xpGain * 10) / 10);
+  // XP çipi (6. dakikadan sonra altın görünür; kademeli müşteriler katlı verir)
+  addPickup('chip', e.x, e.y, Math.round(e.type.xp * (e.xpK || 1) * Game.player.xpGain * 10) / 10);
   if (e.type.elite) {
     addPickup('chest', e.x, e.y);
     for (let i = 0; i < 3; i++) addPickup('coin', e.x + rand(-14, 14), e.y + rand(-10, 10));
@@ -1175,13 +1234,13 @@ function updateEnemies(dt) {
           else if (d < r.range) { mx *= 0.1; my *= 0.1; }
           e.shotCd -= dt;
           if (e.shotCd <= 0 && d < r.range + 20) {
-            e.shotCd = r.cd;
+            e.shotCd = r.cd * (e.cdK || 1);
             const a = Math.atan2(p.y - 8 - e.y, p.x - e.x);
             const n = r.spread || 1;
             for (let si = 0; si < n; si++) {
               const sa = a + (si - (n - 1) / 2) * 0.28;
               Game.eShots.push({ x: e.x, y: e.y - 8, vx: Math.cos(sa) * r.projSpd, vy: Math.sin(sa) * r.projSpd,
-                dmg: r.dmg * dmgMul, t: 0, spr: r.spr });
+                dmg: r.dmg * dmgMul * (e.dmgK || 1), t: 0, spr: r.spr });
             }
           }
         }
@@ -1191,7 +1250,7 @@ function updateEnemies(dt) {
         if (dashCfg && d < 210 && d > 26) {
           e.acCd -= dt;
           if (e.acCd <= 0) {
-            e.acCd = dashCfg.cd * rand(0.85, 1.15);
+            e.acCd = dashCfg.cd * rand(0.85, 1.15) * (e.cdK || 1);
             e.windT = dashCfg.wind;
             continue;
           }
@@ -1289,10 +1348,10 @@ function updateEnemies(dt) {
       }
     }
 
-    // oyuncuya temas hasarı
+    // oyuncuya temas hasarı (kademeli müşteriler daha sert vurur)
     const pr = 6 + 5 * e.type.scale;
     if (dist2(e.x, e.y, p.x, p.y) < pr * pr) {
-      damagePlayer(e.type.dmg * dmgMul);
+      damagePlayer(e.type.dmg * dmgMul * (e.dmgK || 1));
     }
   }
 }
@@ -1305,7 +1364,7 @@ function explodeBomber(e) {
   Sfx.play('explode');
   Game.shake = Math.max(Game.shake, 4);
   Game.shocks.push({ x: e.x, y: e.y - 4, r: b.r, t: 0, col: COL.orange });
-  if (dist2(e.x, e.y, p.x, p.y) < b.r * b.r) damagePlayer(b.dmg * dmgMul);
+  if (dist2(e.x, e.y, p.x, p.y) < b.r * b.r) damagePlayer(b.dmg * dmgMul * (e.dmgK || 1));
   for (const o of Game.enemies) {
     if (o === e) continue;
     if (dist2(e.x, e.y, o.x, o.y) < b.r * b.r) {
@@ -1641,7 +1700,9 @@ function drawPlayField(ctx) {
     const [sx, sy] = W2S(c.x, c.y);
     if (sx < -30 || sx > 510 || sy < -30 || sy > 300) continue;
     const k = 1 - c.t / 0.45;
-    const spr = SPR.bosses[c.typeId] || SPR.enemies[c.typeId];
+    const spr = SPR.bosses[c.typeId]
+      || (c.tier === 3 && SPR.enemiesT3[c.typeId]) || (c.tier === 2 && SPR.enemiesT2[c.typeId])
+      || SPR.enemies[c.typeId];
     const v = c.flip ? spr.frames[0].f : spr.frames[0].n;
     const w = spr.w * c.scale, h = Math.max(2, spr.h * c.scale * Math.max(0.15, k));
     ctx.save();
@@ -1664,16 +1725,24 @@ function drawPlayField(ctx) {
   }
 
   // buhar bulutları (zeminde) — renk silaha göre (puf gri, gaz yeşil, lastik turuncu)
+  // evrimde: daha yoğun + parlak alevli/asitli çekirdek
   for (const cl of Game.clouds) {
     const [sx, sy] = W2S(cl.x, cl.y);
-    const pulse = 1 + Math.sin(cl.t * 5) * 0.06;
+    const pulse = 1 + Math.sin(cl.t * 5) * (cl.evo ? 0.1 : 0.06);
     ctx.save();
-    ctx.globalAlpha = 0.3 * Math.min(1, (cl.dur - cl.t) * 2);
+    ctx.globalAlpha = (cl.evo ? 0.42 : 0.3) * Math.min(1, (cl.dur - cl.t) * 2);
     ctx.fillStyle = cl.col || COL.grey;
     ctx.beginPath(); ctx.ellipse(sx, sy, cl.r * pulse, cl.r * 0.65 * pulse, 0, 0, TAU); ctx.fill();
     ctx.globalAlpha *= 0.6;
     ctx.fillStyle = cl.col ? COL.white : COL.greyLight;
     ctx.beginPath(); ctx.ellipse(sx, sy - 2, cl.r * 0.6, cl.r * 0.4, 0, 0, TAU); ctx.fill();
+    if (cl.evo) {
+      // parlayan çekirdek (lastik: alev, gaz: asit, puf: yoğun sis)
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = 0.22 + Math.sin(cl.t * 9) * 0.08;
+      ctx.fillStyle = cl.wid === 'lastik' ? COL.orange : (cl.wid === 'gaz' ? COL.green : COL.greyLight);
+      ctx.beginPath(); ctx.ellipse(sx, sy - 1, cl.r * 0.45, cl.r * 0.3, 0, 0, TAU); ctx.fill();
+    }
     ctx.restore();
   }
 
@@ -1695,20 +1764,26 @@ function drawPlayField(ctx) {
     ctx.restore();
   }
 
-  // ses halkaları
+  // ses halkaları (evrimde: kalın altın çift halka)
   for (const r of Game.rings) {
     if (r.delay > 0) continue;
     const [sx, sy] = W2S(r.x, r.y);
+    const c1 = r.evo ? COL.gold : (r.col || COL.purple);
+    const c2 = r.evo ? COL.yellow : (r.col ? COL.white : COL.pink);
     ctx.save();
     ctx.globalAlpha = clamp(1 - r.r / r.maxR, 0.15, 0.8);
-    ctx.strokeStyle = COL.purple; ctx.lineWidth = 2;
+    ctx.strokeStyle = c1; ctx.lineWidth = r.evo ? 3 : 2;
     ctx.beginPath(); ctx.ellipse(sx, sy, r.r, r.r * 0.7, 0, 0, TAU); ctx.stroke();
-    ctx.strokeStyle = COL.pink; ctx.lineWidth = 1;
+    ctx.strokeStyle = c2; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.ellipse(sx, sy, r.r - 3, (r.r - 3) * 0.7, 0, 0, TAU); ctx.stroke();
+    if (r.evo && r.r > 10) {
+      ctx.strokeStyle = c1;
+      ctx.beginPath(); ctx.ellipse(sx, sy, r.r - 7, (r.r - 7) * 0.7, 0, 0, TAU); ctx.stroke();
+    }
     ctx.restore();
   }
 
-  // koni vuruşları (geğirti/salto)
+  // koni vuruşları (geğirti/salto) — evrimde parlak iç katman
   for (const cn of Game.cones) {
     const [sx, sy] = W2S(cn.x, cn.y);
     ctx.save();
@@ -1718,6 +1793,15 @@ function drawPlayField(ctx) {
     ctx.moveTo(sx, sy);
     ctx.arc(sx, sy, cn.range, cn.ang - cn.arc / 2, cn.ang + cn.arc / 2);
     ctx.closePath(); ctx.fill();
+    if (cn.evo) {
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = 0.3 * (1 - cn.t / 0.25);
+      ctx.fillStyle = COL.yellow;
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.arc(sx, sy, cn.range * 0.6, cn.ang - cn.arc / 2.6, cn.ang + cn.arc / 2.6);
+      ctx.closePath(); ctx.fill();
+    }
     ctx.restore();
   }
 
@@ -1785,7 +1869,8 @@ function drawPlayField(ctx) {
       continue;
     }
 
-    const spr = e.type.big ? SPR.bosses[e.typeId] : SPR.enemies[e.typeId];
+    const spr = e.type.big ? SPR.bosses[e.typeId]
+      : (e.tier === 3 && SPR.enemiesT3[e.typeId]) || (e.tier === 2 && SPR.enemiesT2[e.typeId]) || SPR.enemies[e.typeId];
     const baseSc = e.type.big ? e.type.sprScale : e.type.scale;
     const sc = baseSc * (1 + (e.popT > 0 ? e.popT * 1.7 : 0));
 
@@ -1811,9 +1896,9 @@ function drawPlayField(ctx) {
     drawShadow(ctx, sx, sy, 6 * sc, 2.4 * sc);
     // supleks zıplaması: havaya fırlar
     const bounce = e.bounceT > 0 ? Math.round(Math.sin((1 - e.bounceT / 0.35) * Math.PI) * 7) : 0;
-    // elit/boss parlaması: arkadan nabız gibi atan hale (öfkede hızlı ve güçlü)
-    if (e.type.elite || e.type.boss) {
-      const ga = (e.enraged ? 0.24 : 0.14) + Math.sin(e.animT * (e.enraged ? 9 : 5)) * 0.08;
+    // elit/boss/T3 parlaması: arkadan nabız gibi atan hale (öfkede hızlı ve güçlü)
+    if (e.type.elite || e.type.boss || e.tier === 3) {
+      const ga = (e.enraged || e.raged ? 0.24 : 0.14) + Math.sin(e.animT * (e.enraged || e.raged ? 9 : 5)) * 0.08;
       const gv = e.flip ? spr.frames[0].wf : spr.frames[0].wn;
       const gw = spr.w * sc, gh = spr.h * sc;
       ctx.save();
@@ -1866,14 +1951,17 @@ function drawPlayField(ctx) {
     const [sx, sy] = W2S(bx, by);
     const [tx2, ty2] = W2S(b.tx, b.ty);
     drawShadow(ctx, tx2, ty2, 5, 2);
-    ctx.drawImage(SPR.minibox, sx - 4, sy - 4);
+    // evrimde altın koli, biraz daha büyük
+    if (b.evo) ctx.drawImage(SPR.evo.minibox, sx - 5, sy - 5, 10, 8);
+    else ctx.drawImage(SPR.minibox, sx - 4, sy - 4);
   }
 
-  // arabalar
+  // arabalar (evrimde altın kaplama konvoy)
   for (const c of Game.cars) {
     const [sx, sy] = W2S(c.x, c.y);
     drawShadow(ctx, sx, sy + 2, 15, 4);
-    const carSpr = c.vis === 'fork' ? SPR.fork : SPR.car;
+    const set = c.evo ? SPR.evo : SPR;
+    const carSpr = c.vis === 'fork' ? set.fork : set.car;
     ctx.drawImage(c.dir > 0 ? carSpr.n : carSpr.f, sx - 16, sy - 15);
   }
 
@@ -1900,18 +1988,20 @@ function drawPlayField(ctx) {
       ctx.fillStyle = COL.greyLight; ctx.fillRect(sx - 1, sy - 1, 3, 2);
       ctx.fillStyle = COL.white; ctx.fillRect(sx, sy - 1, 1, 1);
     } else if (pr.type === 'kemer') {
-      // dönen şampiyonluk kemeri
+      // dönen şampiyonluk kemeri (evrimde ALTIN KEMER: büyük ve parlak)
       ctx.save();
       ctx.translate(sx, sy);
       ctx.rotate(pr.t * 9);
-      ctx.drawImage(SPR.kemerSpr, -5, -3);
+      if (pr.evo) ctx.drawImage(SPR.evo.kemer, -7, -4, 15, 10);
+      else ctx.drawImage(SPR.kemerSpr, -5, -3);
       ctx.restore();
     } else if (pr.type === 'fatura') {
-      ctx.drawImage(SPR.fatura, sx - 3, sy - 4 + Math.sin(pr.t * 12) * 1);
+      const fImg = pr.evo ? SPR.evo.fatura : SPR.fatura;
+      ctx.drawImage(fImg, sx - 3, sy - 4 + Math.sin(pr.t * 12) * 1);
     } else if (pr.type === 'soru') {
-      drawText(ctx, '?', sx - 2, sy - 4, COL.teal, { shadow: COL.outline });
+      drawText(ctx, '?', sx - 2, sy - 4, pr.evo ? COL.gold : COL.teal, { shadow: COL.outline });
     } else {
-      ctx.drawImage(SPR.mail, sx - 4, sy - 3);
+      ctx.drawImage(pr.evo ? SPR.evo.mail : SPR.mail, sx - 4, sy - 3);
     }
   }
 
@@ -1921,8 +2011,11 @@ function drawPlayField(ctx) {
     if (def.kind !== 'orbit') continue;
     const ms = weaponStats(p, w);
     const count = def.single ? 1 : 1 + (w.lvl >= 4 ? 1 : 0) + (w.lvl >= 6 ? 1 : 0);
-    const img = def.vis === 'mic' ? SPR.micHead : (def.vis === 'koli' ? SPR.minibox : SPR.mop);
-    const lineCol = def.vis === 'mic' ? COL.greyDark : (def.vis === 'koli' ? COL.grey : COL.brown);
+    let img = def.vis === 'mic' ? SPR.micHead : (def.vis === 'koli' ? SPR.minibox : SPR.mop);
+    // evrim: altın versiyon, ~%35 daha büyük çizim
+    if (w.evolved) img = def.vis === 'mic' ? SPR.evo.mic : (def.vis === 'koli' ? SPR.evo.minibox : SPR.evo.mop);
+    const scl = w.evolved ? 1.35 : 1;
+    const lineCol = w.evolved ? COL.gold : (def.vis === 'mic' ? COL.greyDark : (def.vis === 'koli' ? COL.grey : COL.brown));
     const [px2, py2] = W2S(p.x, p.y);
     for (let i = 0; i < count; i++) {
       const a = w.angle + (i / count) * TAU;
@@ -1930,7 +2023,8 @@ function drawPlayField(ctx) {
       const my = py2 - 6 + Math.sin(a) * ms.orbitR * 0.7;
       ctx.strokeStyle = lineCol; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(px2, py2 - 8); ctx.lineTo(mx, my); ctx.stroke();
-      ctx.drawImage(img, Math.round(mx - (img.width >> 1)), Math.round(my - (img.height >> 1)));
+      const dw = Math.round(img.width * scl), dh = Math.round(img.height * scl);
+      ctx.drawImage(img, Math.round(mx - dw / 2), Math.round(my - dh / 2), dw, dh);
     }
   }
 

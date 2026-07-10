@@ -60,7 +60,7 @@ const UI = {
       }
       else if (Game.menuIdx === 1) { Game.state = 'shop'; Game.menuIdx = 0; }
       else if (Game.menuIdx === 2) { Game.state = 'album'; Game.menuIdx = 0; }
-      else if (Game.menuIdx === 3) { Game.state = 'scores'; Game.fetchScores(); }
+      else if (Game.menuIdx === 3) { Game.state = 'scores'; Game.scoresT = Game.uiT; Game.fetchScores(); }
       else if (Game.menuIdx === 4) { isFullscreen() ? exitFullscreen() : goFullscreen(); }
       else { Sfx.setMute(!Sfx.muted); }
     }
@@ -953,18 +953,58 @@ const UI = {
   },
 
   // ── OYUN SONU ──
+  // isim kutusu (gizli HTML input) yardımcıları: mobil klavye ancak
+  // gerçek bir input odaklanınca açılır, canvas tek başına açamaz.
+  nameBox() { return document.getElementById('nameBox'); },
+
+  showNameBox() {
+    const nb = this.nameBox();
+    if (!nb) return;
+    nb.value = Game.nameInput;
+    nb.style.display = 'block';
+    // masaüstünde direkt yazılabilsin; mobilde klavye dokununca açılır
+    if (!Input.touchMode) nb.focus();
+  },
+
+  syncNameBox() {
+    const nb = this.nameBox();
+    if (!nb) return;
+    if (nb.style.display !== 'block') this.showNameBox();
+    const clean = nb.value.replace(/[^a-zA-ZçğıöşüÇĞİÖŞÜ0-9 ]/g, '').slice(0, 12);
+    if (clean !== nb.value) nb.value = clean;
+    Game.nameInput = clean;
+  },
+
+  hideNameBox() {
+    const nb = this.nameBox();
+    if (!nb) return;
+    nb.blur();
+    nb.style.display = 'none';
+  },
+
   updateOver() {
-    // isim girişi
-    for (const ch of Input.typed) {
-      if (Game.nameInput.length < 10 && /[a-zA-ZçğıöşüÇĞİÖŞÜ0-9 ]/.test(ch)) {
-        Game.nameInput += ch;
-      }
+    // isim tek kaynaktan gelir: HTML input (çift yazımı önler)
+    this.syncNameBox();
+    // ölüm anı grace süresi: basılı kalan parmak/tuş ekranı hemen kapatmasın
+    if (Game.uiT - (Game.overT || 0) < 1.0) return;
+    if (Input.pressed['KeyR'] && Game.nameInput === '') {
+      this.hideNameBox();
+      Game.startRun(Game.player.charId);
+      return;
     }
-    if (Input.pressed['Backspace']) Game.nameInput = Game.nameInput.slice(0, -1);
-    if (Input.pressed['KeyR'] && Game.nameInput === '') { Game.startRun(Game.player.charId); return; }
-    // mobil: dokunuş = kaydet (isim zaten karakter adıyla dolu gelir)
-    const touchSave = Input.touchMode && Input.mouse.clicked;
-    if (Input.pressed['Enter'] || Input.pressed['NumpadEnter'] || touchSave) { Sfx.play('select'); Game.saveScore(); }
+    // isim satırına tık/dokunuş: input'a odaklan (mobil klavye açılır)
+    if (Input.mouse.clicked && Input.mouseIn(150, 188, 180, 16)) {
+      const nb = this.nameBox();
+      if (nb) nb.focus();
+      return;
+    }
+    // kaydet: ENTER ya da [SKORU KAYDET] butonuna tık/dokunuş
+    const onBtn = Input.mouseIn(165, 210, 150, 18);
+    if (Input.pressed['Enter'] || Input.pressed['NumpadEnter'] || (Input.mouse.clicked && onBtn)) {
+      this.hideNameBox();
+      Sfx.play('select');
+      Game.saveScore();
+    }
   },
 
   drawOver(ctx) {
@@ -1006,14 +1046,34 @@ const UI = {
       }
     }
 
+    // isim kutusu (tıklanabilir/dokunulabilir)
+    const grace = Game.uiT - (Game.overT || 0) < 1.0;
+    ctx.fillStyle = 'rgba(24,20,37,0.8)';
+    ctx.fillRect(150, 188, 180, 16);
+    ctx.strokeStyle = COL.yellow; ctx.lineWidth = 1;
+    ctx.strokeRect(150.5, 188.5, 179, 15);
     const cursor = ((Game.uiT * 3) | 0) % 2 ? '_' : ' ';
-    drawText(ctx, 'ADIN: ' + Game.nameInput + cursor, 240, 196, COL.yellow, { align: 'center', shadow: COL.outline });
-    drawText(ctx, 'ENTER: SKORU KAYDET', 240, 216, COL.greyLight, { align: 'center' });
-    drawText(ctx, 'İSMİ SİLİP R: HEMEN TEKRAR', 240, 230, COL.greyDark, { align: 'center' });
+    drawText(ctx, 'ADIN: ' + Game.nameInput + cursor, 240, 193, COL.yellow, { align: 'center', shadow: COL.outline });
+    if (Input.touchMode) {
+      drawText(ctx, 'İSME DOKUN: KLAVYE AÇILIR', 240, 179, COL.greyDark, { align: 'center' });
+    }
+
+    // [SKORU KAYDET] butonu
+    const btnPulse = 0.5 + Math.sin(Game.uiT * 5) * 0.5;
+    this.panel(ctx, 165, 210, 150, 18, grace ? COL.navy : COL.gold);
+    if (!grace) {
+      ctx.strokeStyle = 'rgba(254,174,52,' + (0.3 + btnPulse * 0.5).toFixed(2) + ')';
+      ctx.strokeRect(163.5, 208.5, 153, 21);
+    }
+    drawText(ctx, 'SKORU KAYDET', 240, 215, grace ? COL.greyDark : COL.gold, { align: 'center', shadow: COL.outline });
+    drawText(ctx, Input.touchMode ? 'BUTONA DOKUN' : 'ENTER VEYA TIKLA', 240, 234, COL.greyLight, { align: 'center' });
+    drawText(ctx, 'İSMİ SİLİP R: HEMEN TEKRAR', 240, 246, COL.greyDark, { align: 'center' });
   },
 
   // ── SKOR TABLOSU ──
   updateScores() {
+    // kayıttan hemen sonra gelen dokunuş tabloyu kapatmasın
+    if (Game.uiT - (Game.scoresT || 0) < 0.6) return;
     if (Input.back() || Input.confirm() || Input.mouse.clicked) {
       Game.state = 'title'; Game.menuIdx = 0;
       Sfx.stopMusic();

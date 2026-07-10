@@ -56,3 +56,22 @@ body {
   cursor: crosshair;
   touch-action: none;
 }
+/* oyun sonu isim kutusu: canvas'taki isim satırının üstünde, neredeyse görünmez.
+   font-size 16px iOS'un odaklanınca yakınlaştırmasını engeller. */
+#nameBox {
+  display: none;
+  position: fixed;
+  left: 50%;
+  top: 68%;
+  transform: translate(-50%, -50%);
+  width: 180px;
+  height: 26px;
+  font-size: 16px;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: transparent;
+  caret-color: transparent;
+  opacity: 0.02;
+  z-index: 5;
+}

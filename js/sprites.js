@@ -47,6 +47,24 @@ function makeVariant(c) {
   return { n: c, f: flipOf(c), wn: whiteOf(c), wf: whiteOf(flipOf(c)) };
 }
 
+// Altın tonlama: evrimleşmiş silah görselleri için sıcak/parlak palet kaydırma
+function goldOf(src) {
+  const c = makeCanvas(src.width, src.height);
+  const x = c.getContext('2d');
+  x.drawImage(src, 0, 0);
+  const img = x.getImageData(0, 0, c.width, c.height);
+  const d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    if (!d[i + 3]) continue;
+    const lum = (d[i] + d[i + 1] + d[i + 2]) / 3;
+    d[i]     = Math.min(255, lum * 1.15 + 90);
+    d[i + 1] = Math.min(255, lum * 0.95 + 50);
+    d[i + 2] = Math.max(0, lum * 0.30);
+  }
+  x.putImageData(img, 0, 0);
+  return c;
+}
+
 // ─── Karakter taban gövdesi (14x17, chibi) ───────────────────
 const BASE_A = [
   '..............',
@@ -989,6 +1007,15 @@ function buildAllSprites() {
   SPR.enemies = {};
   for (const id in ENEMY_TYPES) SPR.enemies[id] = buildEnemySprite(ENEMY_TYPES[id]);
 
+  // gelişmiş kademeler: T2 "KIDEMLİ" (altın üniforma), T3 "EFSANE" (karanlık takım)
+  SPR.enemiesT2 = {}; SPR.enemiesT3 = {};
+  for (const id in ENEMY_TYPES) {
+    const d = ENEMY_TYPES[id];
+    if (d.boss || d.breakable || d.elite) continue;
+    SPR.enemiesT2[id] = buildEnemySprite(Object.assign({}, d, { shirt: COL.gold, shade: COL.orangeDark }));
+    SPR.enemiesT3[id] = buildEnemySprite(Object.assign({}, d, { shirt: COL.redDark, shade: COL.outline, skin: COL.greyLight }));
+  }
+
   // boss'lara özel büyük gövdeler
   SPR.bosses = {};
   for (const id in BOSS_SPRITES) SPR.bosses[id] = buildBossSprite(BOSS_SPRITES[id]);
@@ -1048,6 +1075,18 @@ function buildAllSprites() {
   SPR.kemerSpr = buildGrid(KEMER_ROWS, { o: COL.outline, G: COL.gold, Y: COL.yellow, W: COL.white });
   SPR.micHead = buildGrid(MIC_ROWS, { o: COL.outline, G: COL.greyLight, g: COL.grey, D: COL.greyDark });
   SPR.fatura = buildGrid(FATURA_ROWS, { W: COL.white, g: COL.greyDark, d: COL.grey, R: COL.red });
+
+  // evrimleşmiş silah görselleri: altın tonlanmış kopyalar
+  SPR.evo = {
+    car: { n: goldOf(buildCar()), f: goldOf(flipOf(buildCar())) },
+    fork: { n: goldOf(fork), f: goldOf(flipOf(fork)) },
+    minibox: goldOf(buildGrid(MINIBOX_ROWS, { o: COL.outline, B: COL.skinAlt, b: COL.brown, t: COL.brown })),
+    kemer: goldOf(SPR.kemerSpr),
+    mic: goldOf(SPR.micHead),
+    mail: goldOf(buildGrid(MAIL_ROWS, { o: COL.navy, W: COL.white })),
+    mop: goldOf(buildGrid(MOP_ROWS, { t: COL.brown, o: COL.outline, G: COL.gold })),
+    fatura: goldOf(SPR.fatura)
+  };
 
   SPR.icons = {};
   for (const id of ['suplex', 'car', 'wave', 'burp', 'puff', 'box', 'zimba', 'mail', 'mop',
