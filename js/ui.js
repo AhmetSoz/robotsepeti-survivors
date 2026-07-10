@@ -415,9 +415,16 @@ const UI = {
     const cid = CHAR_ORDER[Game.selIdx];
     if (Input.pressed['KeyQ']) this.cycleTech(cid, 'weapons');
     if (Input.pressed['KeyE']) this.cycleTech(cid, 'skills');
+    // kutucuk üzerinde bilgi kartı (hover); dokunmatikte tıklayınca 3 sn kalır
+    this.tipSlot = null;
     for (let k = 0; k < 3; k++) {
-      if (Input.mouse.clicked && Input.mouseIn(392 + k * 17, 225, 15, 15)) { this.pickTech(cid, 'weapons', k); return; }
-      if (Input.mouse.clicked && Input.mouseIn(392 + k * 17, 249, 15, 15)) { this.pickTech(cid, 'skills', k); return; }
+      if (Input.mouseIn(392 + k * 17, 225, 15, 15)) this.tipSlot = { listName: 'weapons', idx: k };
+      if (Input.mouseIn(392 + k * 17, 249, 15, 15)) this.tipSlot = { listName: 'skills', idx: k };
+    }
+    if (this.tipSlot && Input.mouse.clicked) {
+      this.tipHold = { slot: this.tipSlot, until: Game.uiT + 3 };
+      this.pickTech(cid, this.tipSlot.listName, this.tipSlot.idx);
+      return;
     }
     for (let i = 0; i < 6; i++) {
       const r = this.cardRect(i);
@@ -455,7 +462,13 @@ const UI = {
   applyTech(cid, listName, id) {
     const lo = Meta.loadout(cid);
     Meta.setLoadout(cid, listName === 'weapons' ? id : lo.w, listName === 'skills' ? id : lo.s);
-    Sfx.play('click');
+    // onay yazısı: ne seçildiği net görülsün
+    const def = listName === 'weapons' ? WEAPONS[id] : SKILLS[id];
+    this.tipFlash = {
+      txt: (listName === 'weapons' ? 'VURUŞ SEÇİLDİ: ' : 'YETENEK SEÇİLDİ: ') + def.name,
+      until: Game.uiT + 1.8
+    };
+    Sfx.play('select');
   },
 
   // 3'lü teknik kutucuğu şeridi (seçim ekranı alt paneli)
@@ -514,7 +527,7 @@ const UI = {
     const lo = Meta.loadout(id);
     const w = WEAPONS[lo.w];
     const sk = SKILLS[lo.s];
-    drawText(ctx, 'Q/E VEYA KUTUCUKLAR: TEKNİK SEÇ · KİLİTLİLER DÜKKAN VE BAŞARIMLARLA AÇILIR', 240, 216, COL.greyDark, { align: 'center' });
+    drawText(ctx, 'Q/E VEYA KUTUCUKLAR: TEKNİK SEÇ · ÜSTÜNE GEL: BİLGİ', 240, 216, COL.greyLight, { align: 'center', shadow: COL.outline });
     this.panel(ctx, 10, 224, 460, 42, def.color);
     ctx.drawImage(SPR.icons[lo.w] || SPR.icons.box, 16, 226);
     drawText(ctx, (w.name + ': ' + w.desc).slice(0, 56), 34, 228, COL.white);
@@ -526,6 +539,49 @@ const UI = {
     this.techSlots(ctx, id, 'skills', lo.s, 392, 249);
     drawText(ctx, 'Q', 384, 229, COL.greyLight);
     drawText(ctx, 'E', 384, 253, COL.greyLight);
+
+    // seçim onayı: Q/E ya da tıklamayla teknik değişince kısa bildirim
+    if (this.tipFlash && Game.uiT < this.tipFlash.until) {
+      const a = clamp((this.tipFlash.until - Game.uiT) / 0.4, 0, 1);
+      const tw = textW(this.tipFlash.txt);
+      ctx.fillStyle = 'rgba(24,20,37,' + (a * 0.85).toFixed(2) + ')';
+      ctx.fillRect(240 - tw / 2 - 8, 198, tw + 16, 13);
+      drawText(ctx, this.tipFlash.txt, 240, 201, COL.yellow, { align: 'center', shadow: COL.outline, alpha: a });
+    }
+
+    // bilgi kartı: kutucuğun üstüne gelince (dokunmatikte tıklayınca 3 sn)
+    let tip = this.tipSlot;
+    if (!tip && this.tipHold && Game.uiT < this.tipHold.until) tip = this.tipHold.slot;
+    if (tip) {
+      const list = TECHS[id][tip.listName];
+      const tid = list[tip.idx];
+      if (tid) {
+        const isW = tip.listName === 'weapons';
+        const tdef = isW ? WEAPONS[tid] : SKILLS[tid];
+        const open = Meta.techUnlocked(id, tip.listName, tid);
+        const curSel = (isW ? lo.w : lo.s) === tid;
+        // içerik satırları
+        const descLines = wrapText(tdef.desc, 34).slice(0, 2);
+        const achName = open ? null : this.achFor('t_' + tid);
+        const h = 26 + descLines.length * 10 + (open ? 10 : (achName ? 20 : 10));
+        const bx = 240, by = 210 - h;
+        this.panel(ctx, bx, by, 230, h, open ? COL.teal : COL.gold);
+        const icon = SPR.icons[isW ? tid : tdef.icon];
+        if (icon) ctx.drawImage(icon, bx + 6, by + 5);
+        drawText(ctx, tdef.name, bx + 22, by + 4, open ? COL.white : COL.gold);
+        drawText(ctx, isW ? 'OTOMATİK VURUŞ' : 'SPACE YETENEĞİ', bx + 22, by + 13, COL.grey);
+        let ty = by + 24;
+        for (const ln of descLines) { drawText(ctx, ln, bx + 6, ty, COL.greyLight); ty += 10; }
+        if (curSel) {
+          drawText(ctx, '► ŞU AN SEÇİLİ', bx + 6, ty, COL.green);
+        } else if (open) {
+          drawText(ctx, 'AÇIK · TIKLAYINCA SEÇİLİR', bx + 6, ty, COL.teal);
+        } else {
+          drawText(ctx, 'KİLİTLİ · DÜKKAN: ' + TECH_COST[tip.idx] + ' PARA', bx + 6, ty, COL.gold);
+          if (achName) drawText(ctx, 'VEYA BAŞARIM: ' + achName, bx + 6, ty + 10, COL.yellow);
+        }
+      }
+    }
   },
 
   // ── HUD ──

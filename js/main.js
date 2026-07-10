@@ -137,7 +137,17 @@
       }
     }
   }
-  if (params.get('screen') === 'select') Game.state = 'select';
+  if (params.get('screen') === 'select') {
+    Game.state = 'select';
+    // bilgi kartı testi: ?tip=w1 (vuruş 1) / ?tip=s2 (yetenek 2)
+    const tip = params.get('tip');
+    if (tip) {
+      UI.tipHold = {
+        slot: { listName: tip[0] === 'w' ? 'weapons' : 'skills', idx: parseInt(tip[1], 10) || 0 },
+        until: 1e9
+      };
+    }
+  }
   if (params.get('screen') === 'scores') Game.state = 'scores';
   if (params.get('screen') === 'shop') {
     Game.state = 'shop';
