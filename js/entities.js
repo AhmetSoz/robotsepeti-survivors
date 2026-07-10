@@ -530,12 +530,16 @@ function suplexPulse(s, w) {
   // merkez: normalde oyuncu; atCrowd (BAS DROP) en kalabalık noktaya iner
   let cx = p.x, cy = p.y;
   if (def && def.atCrowd) {
-    let best = null, bestN = -1;
+    // örnekleme sınırlı (O(n²) patlamasın): en fazla 24 aday, komşu sayımı 40'ta erken çıkar
+    let best = null, bestN = -1, cand = 0;
     for (const e of Game.enemies) {
-      if (e.spawnT > 0 || e.type.breakable) continue;
+      if (e.dead || e.spawnT > 0 || e.type.breakable) continue;
       if (dist2(p.x, p.y, e.x, e.y) > 150 * 150) continue;
+      if (++cand > 24) break;
       let n2 = 0;
-      for (const o of Game.enemies) if (dist2(e.x, e.y, o.x, o.y) < 45 * 45) n2++;
+      for (const o of Game.enemies) {
+        if (dist2(e.x, e.y, o.x, o.y) < 45 * 45 && ++n2 >= 40) break;
+      }
       if (n2 > bestN) { bestN = n2; best = e; }
     }
     if (best) { cx = best.x; cy = best.y; }
@@ -551,7 +555,7 @@ function suplexPulse(s, w) {
   // evrimleşmiş vuruş: altın şok + daha büyük ve kalıcı zemin çatlağı
   const evo = w && w.evolved;
   Game.shocks.push({ x: cx, y: cy - 6, r: radius, t: 0, col: champ || evo ? COL.gold : baseCol });
-  Game.decals.push({ x: cx, y: cy, r: radius * (evo ? 1.0 : 0.7), t: 0, dur: champ || evo ? 3 : 1.8 });
+  (Game.decals.length > 60 && Game.decals.shift()), Game.decals.push({ x: cx, y: cy, r: radius * (evo ? 1.0 : 0.7), t: 0, dur: champ || evo ? 3 : 1.8 });
   Game.shake = Math.max(Game.shake, champ ? 4 : 2);
   Game.kickY = Math.min(4, Game.kickY + (champ ? 3 : 1.5));
   Sfx.play(champ ? 'bigslam' : 'suplex');
@@ -783,7 +787,7 @@ function updateWeaponEntities(dt) {
     c.skidT = (c.skidT || 0) - dt;
     if (c.skidT <= 0) {
       c.skidT = 0.05;
-      Game.decals.push({ type: 'skid', x: c.x - c.dir * 10, y: c.y + 2, dir: c.dir, t: 0, dur: 2.2 });
+      (Game.decals.length > 60 && Game.decals.shift()), Game.decals.push({ type: 'skid', x: c.x - c.dir * 10, y: c.y + 2, dir: c.dir, t: 0, dur: 2.2 });
     }
     // altın konvoy: arkasından parıltı saçar
     if (c.evo && Math.random() < 8 * dt) {
@@ -975,9 +979,9 @@ function spawnEnemy(typeId, x, y, tier) {
     maxHp: 0,
     spd: t.speed * rand(0.9, 1.1) * (tm ? tm.spd : 1),
     flip: false, animT: rand(1),
-    kx: 0, ky: 0, stun: 0, flash: 0, popT: 0, bounceT: 0,
+    kx: 0, ky: 0, stun: 0, flash: 0, popT: 0, bounceT: 0, dead: false,
     wanderT: rand(TAU), shotCd: rand(1, 3), droneCd: 0,
-    spawnT: t.breakable ? 0 : (t.boss ? 1.0 : 0.55),
+    spawnT: t.breakable ? 0 : (t.boss ? 2.2 : 0.55),   // boss: giriş sineması bitene dek zararsız
     mopCd: 0, hasteT: 0, fuseT: -1,
     windT: 0, dashT: 0, dvx: 0, dvy: 0,
     acCd: rand(1.5, 3.5),
@@ -996,6 +1000,7 @@ function spawnEnemy(typeId, x, y, tier) {
 
 function damageEnemy(e, dmg, kx, ky, silent) {
   const p = Game.player;
+  if (e.dead) return;         // bu karede zaten öldü
   if (e.spawnT > 0) return;   // henüz sahaya inmedi
   const armor = (e.type.armor || 0) + (e.armorX || 0);
   if (armor) dmg = Math.max(1, dmg - armor);
@@ -1043,9 +1048,11 @@ function damageEnemy(e, dmg, kx, ky, silent) {
 }
 
 function killEnemy(e) {
-  const idx = Game.enemies.indexOf(e);
-  if (idx < 0) return;
-  Game.enemies.splice(idx, 1);
+  // ölüm ertelenir: anında splice etmek, o sırada diziyi gezen alan-hasarı
+  // döngülerinin (bomba/nova/patlama) düşman ATLAMASINA yol açıyordu.
+  // Burada işaretle + ödül/görsel işini yap; temizlik kare sonunda sweepDead ile.
+  if (e.dead) return;
+  e.dead = true;
   Game.score += Math.round(e.type.score * (e.scoreK || 1) * Game.player.greed * Game.scoreMul());
 
   // kırılabilir nesne: ödül düşür, kıymık saç
@@ -1119,7 +1126,8 @@ function killEnemy(e) {
     addPickup('heart', e.x + 18, e.y);
     for (let i = 0; i < 6; i++) addPickup('coin', e.x + rand(-20, 20), e.y + rand(-14, 14));
     Game.bossAlive = false;
-    Game.bossChestT = 1.0;   // ölüm şovundan sonra ödül kolisi kendiliğinden açılır
+    Game.bossChestQ++;       // kuyruk: iki boss art arda ölse de her ödül ayrı açılır
+    Game.bossChestT = Math.max(Game.bossChestT, 1.0);
     Game.freeze = 0.25;
     Game.shake = Math.max(Game.shake, 6);
     // boss ölüm şovu: beyaz flaş + çifte şok halkası + kıvılcım yağmuru
@@ -1145,6 +1153,13 @@ function killEnemy(e) {
   addPart({ x: e.x, y: e.y - 8, vx: rand(-6, 6), vy: -30, dur: 0.75, type: 'ghost' });
 }
 
+// Kare sonunda ölü işaretlileri tek seferde temizle (splice-atlama düzeltmesi)
+function sweepDead() {
+  for (let i = Game.enemies.length - 1; i >= 0; i--) {
+    if (Game.enemies[i].dead) Game.enemies.splice(i, 1);
+  }
+}
+
 function updateEnemies(dt) {
   const p = Game.player;
 
@@ -1152,6 +1167,7 @@ function updateEnemies(dt) {
   const CELL = 20;
   const grid = new Map();
   for (const e of Game.enemies) {
+    if (e.dead) continue;
     const key = ((e.x / CELL) | 0) + ',' + ((e.y / CELL) | 0);
     let arr = grid.get(key);
     if (!arr) { arr = []; grid.set(key, arr); }
@@ -1161,6 +1177,7 @@ function updateEnemies(dt) {
   const dmgMul = 1 + Game.time / 60 * 0.12;
 
   for (const e of Game.enemies) {
+    if (e.dead) continue;
     e.animT += dt;
     if (e.flash > 0) e.flash -= dt;
     if (e.droneCd > 0) e.droneCd -= dt;
@@ -1591,6 +1608,7 @@ function collectPickup(pk) {
 function addPart(o) {
   o.t = 0;
   o.vx = o.vx || 0; o.vy = o.vy || 0;
+  if (Game.parts.length > 400) Game.parts.shift();   // tepe anlarında kare düşmesin
   Game.parts.push(o);
 }
 
@@ -1847,9 +1865,9 @@ function drawPlayField(ctx) {
     drawSpr(ctx, SPR.chars[ai.charId], ai.frame, sx, sy + 1, { flip: ai.flip, alpha: k * 0.35 });
   }
 
-  // y'ye göre sıralanmış varlıklar (düşmanlar + oyuncu)
+  // y'ye göre sıralanmış varlıklar (düşmanlar + oyuncu; ölü işaretliler çizilmez)
   const drawables = [];
-  for (const e of Game.enemies) drawables.push({ y: e.y, e });
+  for (const e of Game.enemies) { if (!e.dead) drawables.push({ y: e.y, e }); }
   drawables.push({ y: p.y, player: true });
   drawables.sort((a, b) => a.y - b.y);
 

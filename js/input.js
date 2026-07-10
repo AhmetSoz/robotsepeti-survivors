@@ -100,11 +100,14 @@ const Input = {
   // ekran koordinatını 480x270 oyun koordinatına çevirir
   toGame(canvas, cx, cy) {
     const r = canvas.getBoundingClientRect();
+    // tam ekran / döndürme geçişi anında rect 0 olabilir → NaN üretme!
+    if (!r.width || !r.height) return { x: this.mouse.x, y: this.mouse.y };
     return { x: (cx - r.left) / (r.width / 480), y: (cy - r.top) / (r.height / 270) };
   },
 
   axis() {
-    // dokunmatik joystick aktifse onu kullan
+    // dokunmatik joystick aktifse onu kullan (NaN sızarsa sıfırla)
+    if (!isFinite(this.joy.ax) || !isFinite(this.joy.ay)) { this.joy.ax = 0; this.joy.ay = 0; }
     if (this.joy.id !== -1 && (this.joy.ax || this.joy.ay)) {
       return { dx: this.joy.ax, dy: this.joy.ay };
     }

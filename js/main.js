@@ -29,9 +29,11 @@
   window.addEventListener('orientationchange', () => setTimeout(resize, 100));
   resize();
 
-  // odak kaybında otomatik mola
+  // odak kaybında otomatik mola (tam ekran geçişinin tetiklediği sahte blur hariç)
   window.addEventListener('blur', () => {
-    if (Game.state === 'play') { Game.state = 'pause'; Game.menuIdx = 0; }
+    if (Game.state === 'play' && Game.uiT - (Game.fsT || -10) > 0.8) {
+      Game.state = 'pause'; Game.menuIdx = 0;
+    }
   });
 
   // hata olursa ekranda göster (geliştirme kolaylığı)

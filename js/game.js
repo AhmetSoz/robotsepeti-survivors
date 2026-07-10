@@ -25,7 +25,7 @@ const Game = {
   slowT: 0, slowK: 1, decoy: null,
   hazards: [], eRings: [], afterimgs: [], beams: [], ambients: [],
   bossIntro: null, curZone: 'depo', roombaT: 6, sparkT: 12,
-  ringT: 20, bossChestT: 0, t2Seen: false, t3Seen: false,
+  ringT: 20, bossChestT: 0, bossChestQ: 0, t2Seen: false, t3Seen: false,
   spawnAcc: 0, eliteT: 60, hordeT: 120, bossIdx: 0, bossAlive: false, hordeN: 0,
   banner: null, flashT: 0, flashCol: '255,255,255',
   combo: 0, comboT: 0, comboBest: 0,
@@ -53,7 +53,7 @@ const Game = {
     this.projs = []; this.corpses = []; this.decals = [];
     this.hazards = []; this.eRings = []; this.afterimgs = []; this.beams = []; this.ambients = [];
     this.bossIntro = null; this.curZone = 'depo'; this.roombaT = 6; this.sparkT = 12;
-    this.ringT = 20; this.bossChestT = 0; this.t2Seen = false; this.t3Seen = false;
+    this.ringT = 20; this.bossChestT = 0; this.bossChestQ = 0; this.t2Seen = false; this.t3Seen = false;
     this.spawnAcc = 0; this.hordeT = 120; this.bossIdx = 0; this.bossAlive = false; this.hordeN = 0;
     this.flashT = 0;
     this.combo = 0; this.comboT = 0; this.comboBest = 0;
@@ -86,7 +86,15 @@ const Game = {
 
   // ── güncelleme ──
   update(dt) {
-    if (this.freeze > 0) { this.freeze -= dt; return; }
+    if (this.freeze > 0) {
+      // vuruş donması sırasında basılan yetenek/duraklat yutulmasın
+      if (Input.pressed['Space'] || Input.pressed['KeyE']) this.pendSkill = true;
+      if (Input.pressed['Escape']) this.pendPause = true;
+      this.freeze -= dt;
+      return;
+    }
+    if (this.pendSkill) { this.pendSkill = false; Input.pressed['Space'] = true; }
+    if (this.pendPause) { this.pendPause = false; Input.pressed['Escape'] = true; }
 
     switch (this.state) {
       case 'play': this.updatePlay(dt); break;
@@ -113,12 +121,19 @@ const Game = {
     if (Input.back()) { this.state = 'pause'; this.menuIdx = 0; Sfx.play('click'); return; }
     if (Input.pressed['KeyM']) Sfx.setMute(!Sfx.muted);
 
+    // NaN bekçisi: konum/kamera bozulursa (rotasyon/tam ekran anındaki giriş
+    // hataları) her şey "kaybolmuş" görünür — anında toparla
+    const p0 = this.player;
+    if (!isFinite(p0.x) || !isFinite(p0.y)) { p0.x = isFinite(this.camX) ? this.camX : 0; p0.y = isFinite(this.camY) ? this.camY : 0; }
+    if (!isFinite(this.camX) || !isFinite(this.camY)) { this.camX = p0.x; this.camY = p0.y; }
+
     updatePlayer(dt);
     fireWeapons(dt);
     updateWeaponEntities(dt);
     updateEnemies(dt);
     updatePickups(dt);
     updateHazards(dt);
+    sweepDead();   // bu karede ölenler tek seferde temizlenir (splice-atlama düzeltmesi)
     updateFx(dt);
     this.director(dt);
     Missions.update(dt);
@@ -166,10 +181,11 @@ const Game = {
       if (this.bossIntro.t > 2.2) this.bossIntro = null;
     }
 
-    // boss ödülü: ölüm şovu bitince büyük koli kendiliğinden açılır
+    // boss ödülü: ölüm şovu bitince büyük koli kendiliğinden açılır (kuyruklu)
     if (this.bossChestT > 0) {
       this.bossChestT -= dt;
       if (this.bossChestT <= 0) {
+        if (--this.bossChestQ > 0) this.bossChestT = 0.6;   // sıradaki boss ödülü
         this.banner = { txt: 'BOSS ÖDÜLÜ: BÜYÜK KARGO!', t: 0 };
         this.openChest(true);
         return;

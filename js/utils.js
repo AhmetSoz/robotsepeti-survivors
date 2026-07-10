@@ -21,6 +21,7 @@ function hash2(x, y, s) {
 // Kullanıcı dokunuşundan çağrılmalı (tarayıcı şartı).
 function goFullscreen() {
   try {
+    if (typeof Game !== 'undefined') Game.fsT = Game.uiT;   // blur-mola koruması
     const el = document.documentElement;
     if (document.fullscreenElement || document.webkitFullscreenElement) return;
     const fn = el.requestFullscreen || el.webkitRequestFullscreen;
@@ -48,7 +49,12 @@ function exitFullscreen() {
 
 function fmtTime(t) {
   t = Math.max(0, Math.floor(t));
-  const m = Math.floor(t / 60), s = t % 60;
+  const s = t % 60;
+  if (t >= 3600) {
+    const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60);
+    return h + ':' + (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+  }
+  const m = Math.floor(t / 60);
   return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
 }
 

@@ -32,7 +32,7 @@ const Missions = {
       def = pick(MISSION_DEFS);
     }
     this.lastId = def.id;
-    this.cur = { def, target: def.base + def.scale * this.doneN, prog: 0 };
+    this.cur = { def, target: def.base + def.scale * this.doneN, prog: 0, startT: Game.time };
   },
 
   // olay bildirimleri: killEnemy / collectPickup / kombo çağırır
@@ -54,8 +54,9 @@ const Missions = {
       return;
     }
     if (this.cur.def.timer) {
-      // hasarsız dayanma: son hasar anından beri geçen süre
-      this.cur.prog = Math.min(this.cur.target, Game.time - Game.lastHurtT);
+      // hasarsız dayanma: görev başladıktan SONRAKİ hasarsız süre sayılır
+      const from = Math.max(Game.lastHurtT, this.cur.startT || 0);
+      this.cur.prog = Math.min(this.cur.target, Game.time - from);
       if (this.cur.prog >= this.cur.target) this.complete();
     }
   },

@@ -24,6 +24,16 @@ const UI = {
     ctx.fillRect(x + w - 3, y + h - 1, 3, 1); ctx.fillRect(x + w - 1, y + h - 3, 1, 3);
   },
 
+  // ── mobil GERİ butonu: tam ekran menülerin sol üstü (ESC'siz çıkış) ──
+  backBtn(ctx) {
+    this.panel(ctx, 6, 6, 46, 16, COL.navy);
+    drawText(ctx, '< GERİ', 12, 10, COL.greyLight);
+  },
+
+  backHit() {
+    return Input.mouse.clicked && Input.mouseIn(4, 4, 52, 22);
+  },
+
   navVertical(len) {
     if (Input.pressed['ArrowDown'] || Input.pressed['KeyS']) { Game.menuIdx = (Game.menuIdx + 1) % len; Sfx.play('click'); }
     if (Input.pressed['ArrowUp'] || Input.pressed['KeyW']) { Game.menuIdx = (Game.menuIdx + len - 1) % len; Sfx.play('click'); }
@@ -188,7 +198,7 @@ const UI = {
   },
 
   updateShop() {
-    if (Input.back()) { Game.state = 'title'; Game.menuIdx = 0; return; }
+    if (Input.back() || this.backHit()) { Game.state = 'title'; Game.menuIdx = 0; Sfx.play('click'); return; }
     // sekme değiştir: sol/sağ ya da sekme başlığına tıkla
     if (Input.pressed['ArrowRight'] || Input.pressed['KeyD']) {
       this.shopTab = (this.shopTab + 1) % 3; Game.menuIdx = 0; Sfx.play('click'); return;
@@ -233,6 +243,7 @@ const UI = {
   drawShop(ctx) {
     World.drawFloor(ctx, 777, 333, Game.uiT);
     this.dim(ctx, 0.72);
+    this.backBtn(ctx);
     drawText(ctx, 'DÜKKAN', 240, 8, COL.orange, { align: 'center', scale: 2, shadow: COL.outline });
     ctx.drawImage(SPR.coin, 380, 10);
     drawText(ctx, Meta.bank, 390, 11, COL.gold, { shadow: COL.outline });
@@ -333,7 +344,7 @@ const UI = {
 
   // ── ALBÜM: başarımlar + istatistikler ──
   updateAlbum() {
-    if (Input.back()) { Game.state = 'title'; Game.menuIdx = 0; return; }
+    if (Input.back() || this.backHit()) { Game.state = 'title'; Game.menuIdx = 0; Sfx.play('click'); return; }
     this.navVertical(ACH_DEFS.length);
     // dokunma/tekerlek yerine: tıklanan satır seçilir
     for (let r = 0; r < 8; r++) {
@@ -348,6 +359,7 @@ const UI = {
   drawAlbum(ctx) {
     World.drawFloor(ctx, 777, 333, Game.uiT);
     this.dim(ctx, 0.75);
+    this.backBtn(ctx);
     const doneN = Achievements.countDone();
     drawText(ctx, 'ALBÜM', 240, 8, COL.gold, { align: 'center', scale: 2, shadow: COL.outline });
     drawText(ctx, doneN + '/' + ACH_DEFS.length + ' BAŞARIM', 240, 26, COL.greyLight, { align: 'center' });
@@ -416,10 +428,11 @@ const UI = {
     if (Input.pressed['KeyQ']) this.cycleTech(cid, 'weapons');
     if (Input.pressed['KeyE']) this.cycleTech(cid, 'skills');
     // kutucuk üzerinde bilgi kartı (hover); dokunmatikte tıklayınca 3 sn kalır
+    // dokunma hedefleri büyük (25x25 bölge, 21px kutu) — mobil parmak dostu
     this.tipSlot = null;
     for (let k = 0; k < 3; k++) {
-      if (Input.mouseIn(392 + k * 17, 225, 15, 15)) this.tipSlot = { listName: 'weapons', idx: k };
-      if (Input.mouseIn(392 + k * 17, 249, 15, 15)) this.tipSlot = { listName: 'skills', idx: k };
+      if (Input.mouseIn(382 + k * 24, 220, 25, 24)) this.tipSlot = { listName: 'weapons', idx: k };
+      if (Input.mouseIn(382 + k * 24, 244, 25, 24)) this.tipSlot = { listName: 'skills', idx: k };
     }
     if (this.tipSlot && Input.mouse.clicked) {
       this.tipHold = { slot: this.tipSlot, until: Game.uiT + 3 };
@@ -455,7 +468,19 @@ const UI = {
   pickTech(cid, listName, idx) {
     const id = TECHS[cid][listName][idx];
     if (!id) return;
-    if (!Meta.techUnlocked(cid, listName, id)) { Sfx.play('hurt'); return; }
+    if (!Meta.techUnlocked(cid, listName, id)) {
+      // kilitli tekniğe dokunuş: paran yetiyorsa DOĞRUDAN satın al (mobil dostu)
+      const cost = TECH_COST[idx] || 0;
+      if (Meta.buyUnlock('t_' + id, cost)) {
+        Sfx.play('chest');
+        this.applyTech(cid, listName, id);
+        this.tipFlash = { txt: 'TEKNİK AÇILDI: ' + (listName === 'weapons' ? WEAPONS[id] : SKILLS[id]).name + ' (-' + cost + ' PARA)', until: Game.uiT + 2.2 };
+      } else {
+        Sfx.play('hurt');
+        this.tipFlash = { txt: 'KİLİTLİ: ' + cost + ' PARA GEREK (BANKA: ' + Meta.bank + ')', until: Game.uiT + 2 };
+      }
+      return;
+    }
     this.applyTech(cid, listName, id);
   },
 
@@ -471,28 +496,28 @@ const UI = {
     Sfx.play('select');
   },
 
-  // 3'lü teknik kutucuğu şeridi (seçim ekranı alt paneli)
+  // 3'lü teknik kutucuğu şeridi (seçim ekranı alt paneli; 21px kutu = parmak dostu)
   techSlots(ctx, cid, listName, curId, x0, y0) {
     const list = TECHS[cid][listName];
     for (let k = 0; k < list.length; k++) {
       const tid = list[k];
       const open = Meta.techUnlocked(cid, listName, tid);
       const cur = tid === curId;
-      const x = x0 + k * 17;
+      const x = x0 + k * 24;
       ctx.fillStyle = cur ? 'rgba(254,231,97,0.18)' : 'rgba(24,20,37,0.6)';
-      ctx.fillRect(x, y0, 15, 15);
+      ctx.fillRect(x, y0, 21, 21);
       ctx.strokeStyle = cur ? COL.yellow : (open ? COL.greyDark : COL.navyDark);
       ctx.lineWidth = 1;
-      ctx.strokeRect(x + 0.5, y0 + 0.5, 14, 14);
+      ctx.strokeRect(x + 0.5, y0 + 0.5, 20, 20);
       const icon = SPR.icons[listName === 'weapons' ? tid : SKILLS[tid].icon];
       if (open) {
-        if (icon) ctx.drawImage(icon, x + 1, y0 + 1);
+        if (icon) ctx.drawImage(icon, x + 4, y0 + 4);
       } else {
         // kilitli: soluk ikon + altın kilit
-        if (icon) { ctx.save(); ctx.globalAlpha = 0.22; ctx.drawImage(icon, x + 1, y0 + 1); ctx.restore(); }
+        if (icon) { ctx.save(); ctx.globalAlpha = 0.22; ctx.drawImage(icon, x + 4, y0 + 4); ctx.restore(); }
         ctx.fillStyle = COL.gold;
-        ctx.fillRect(x + 5, y0 + 7, 5, 4);
-        ctx.fillRect(x + 6, y0 + 5, 1, 2); ctx.fillRect(x + 8, y0 + 5, 1, 2);
+        ctx.fillRect(x + 8, y0 + 10, 6, 5);
+        ctx.fillRect(x + 9, y0 + 7, 1, 3); ctx.fillRect(x + 12, y0 + 7, 1, 3);
       }
     }
   },
@@ -535,10 +560,10 @@ const UI = {
     ctx.drawImage(SPR.icons[sk.icon] || SPR.icons['sk_' + id], 16, 250);
     drawText(ctx, (sk.name + ': ' + sk.desc).slice(0, 56), 34, 252, COL.yellow);
     // sağda teknik kutucukları: üst sıra vuruşlar (Q), alt sıra yetenekler (E)
-    this.techSlots(ctx, id, 'weapons', lo.w, 392, 225);
-    this.techSlots(ctx, id, 'skills', lo.s, 392, 249);
-    drawText(ctx, 'Q', 384, 229, COL.greyLight);
-    drawText(ctx, 'E', 384, 253, COL.greyLight);
+    this.techSlots(ctx, id, 'weapons', lo.w, 384, 221);
+    this.techSlots(ctx, id, 'skills', lo.s, 384, 245);
+    drawText(ctx, 'Q', 375, 228, COL.greyLight);
+    drawText(ctx, 'E', 375, 252, COL.greyLight);
 
     // seçim onayı: Q/E ya da tıklamayla teknik değişince kısa bildirim
     if (this.tipFlash && Game.uiT < this.tipFlash.until) {
@@ -758,7 +783,7 @@ const UI = {
     if (Game.bossAlive) {
       let boss = null;
       for (let i = Game.enemies.length - 1; i >= 0; i--) {
-        if (Game.enemies[i].type.boss) { boss = Game.enemies[i]; break; }
+        if (Game.enemies[i].type.boss && !Game.enemies[i].dead) { boss = Game.enemies[i]; break; }
       }
       if (boss) {
         const hpK = clamp(boss.hp / boss.maxHp, 0, 1);
@@ -784,14 +809,15 @@ const UI = {
       }
     }
 
-    // duyuru bandı (koyu şerit üstünde)
+    // duyuru bandı (koyu şerit üstünde; başarım toast'ı varken alta kayar)
     if (Game.banner) {
+      const by = Game.achToast ? 74 : 56;
       const a = clamp(3 - Game.banner.t, 0, 1);
       const tw = textW(Game.banner.txt);
       ctx.fillStyle = 'rgba(24,20,37,' + (a * 0.6).toFixed(3) + ')';
-      ctx.fillRect(240 - tw / 2 - 8, 56, tw + 16, 13);
+      ctx.fillRect(240 - tw / 2 - 8, by, tw + 16, 13);
       const blink = 0.7 + Math.sin(Game.banner.t * 10) * 0.3;
-      drawText(ctx, Game.banner.txt, 240, 59, COL.yellow, { align: 'center', scale: 1, shadow: COL.outline, alpha: clamp(a * blink, 0, 1) });
+      drawText(ctx, Game.banner.txt, 240, by + 3, COL.yellow, { align: 'center', scale: 1, shadow: COL.outline, alpha: clamp(a * blink, 0, 1) });
     }
 
     drawText(ctx, 'ESC: MOLA', 474, 258, COL.navy, { align: 'right' });
@@ -804,7 +830,14 @@ const UI = {
 
   updateLevelUp() {
     const n = Game.levelOptions.length;
-    if (!n) { Game.state = 'play'; return; }
+    if (!n) {
+      // havuz boşsa emeğin karşılığı yine verilir (openChest ile tutarlı)
+      Game.coins += 5;
+      Game.score += 200;
+      addFloat(Game.player.x, Game.player.y - 24, '+5 PARA', COL.gold, true);
+      Game.state = 'play';
+      return;
+    }
     if (Input.pressed['ArrowRight'] || Input.pressed['KeyD']) { Game.levelIdx = (Game.levelIdx + 1) % n; Sfx.play('click'); }
     if (Input.pressed['ArrowLeft'] || Input.pressed['KeyA']) { Game.levelIdx = (Game.levelIdx + n - 1) % n; Sfx.play('click'); }
     for (let i = 0; i < n; i++) {
@@ -1084,6 +1117,7 @@ const UI = {
   drawScores(ctx) {
     World.drawFloor(ctx, 777, 333, Game.uiT);
     this.dim(ctx, 0.7);
+    this.backBtn(ctx);
     drawText(ctx, 'SKOR TABLOSU', 240, 14, COL.gold, { align: 'center', scale: 2, shadow: COL.outline });
 
     const list = Game.loadScores();
