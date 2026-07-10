@@ -148,6 +148,7 @@ const CHAR_ORDER = ['ahmet', 'ali', 'bekir', 'can', 'erkan', 'berker'];
 const WEAPONS = {
   suplex: {
     name: 'SUPLEKS ŞOKU',
+    kind: 'pulse',
     desc: 'Etrafındaki müşterileri mindere çakar.',
     lvlDesc: 'Hasar ve alan artar.',
     base: { cd: 2.0, dmg: 10, radius: 27, kb: 160 },
@@ -155,6 +156,7 @@ const WEAPONS = {
   },
   car: {
     name: 'ŞİRKET ARACI',
+    kind: 'car',
     desc: 'Tedarik aracı sahadan geçer, önüne geleni ezer.',
     lvlDesc: 'Hasar artar, bekleme düşer. SV4: çift araç!',
     base: { cd: 4.6, dmg: 20, kb: 220, band: 13 },
@@ -162,6 +164,7 @@ const WEAPONS = {
   },
   wave: {
     name: 'SES DALGASI',
+    kind: 'ring',
     desc: 'Genişleyen nota halkaları müşterileri sarsar.',
     lvlDesc: 'Menzil ve hasar artar. SV4: +1 halka.',
     base: { cd: 1.8, dmg: 6, maxR: 44 },
@@ -169,6 +172,7 @@ const WEAPONS = {
   },
   burp: {
     name: 'GEĞİRTİ DALGASI',
+    kind: 'cone',
     desc: 'Koni şeklinde itici bir geğirti. Afiyet olsun.',
     lvlDesc: 'Menzil, açı ve hasar artar.',
     base: { cd: 1.5, dmg: 8, range: 35, arc: 1.3, kb: 190 },
@@ -176,6 +180,7 @@ const WEAPONS = {
   },
   puff: {
     name: 'PUF BULUTU',
+    kind: 'cloud',
     desc: 'Kalıcı buhar bulutu içindekileri eritir.',
     lvlDesc: 'Alan, süre ve hasar artar.',
     base: { cd: 2.4, dps: 5, radius: 18, dur: 3.2, maxClouds: 3 },
@@ -183,6 +188,7 @@ const WEAPONS = {
   },
   box: {
     name: 'KOLİ FIRLATMA',
+    kind: 'thrown',
     desc: 'Paketlenmiş koli en yakın müşteriye uçar.',
     lvlDesc: 'Hasar ve alan artar. SV3/SV5: +1 koli.',
     base: { cd: 1.6, dmg: 11, splash: 17 },
@@ -191,6 +197,7 @@ const WEAPONS = {
   // ── koşu içinde alınabilen ek silahlar ──
   zimba: {
     name: 'ZIMBA TABANCASI',
+    kind: 'proj',
     desc: 'En yakın müşteriye delici zımba teli fırlatır.',
     lvlDesc: 'Hasar ve delme artar. SV3/SV5: +1 tel.',
     base: { cd: 1.15, dmg: 8, spd: 210, pierce: 2 },
@@ -198,6 +205,7 @@ const WEAPONS = {
   },
   mail: {
     name: 'TOPLU MAİL',
+    kind: 'homing',
     desc: 'Güdümlü e-postalar rastgele müşterileri bulur.',
     lvlDesc: 'Hasar ve mail sayısı artar.',
     base: { cd: 2.3, dmg: 10, count: 2, spd: 125 },
@@ -205,10 +213,97 @@ const WEAPONS = {
   },
   mop: {
     name: 'DEVRİYE PASPASI',
+    kind: 'orbit',
     desc: 'Etrafında dönen paspas müşterileri siler süpürür.',
     lvlDesc: 'Hasar ve hız artar. SV4/SV6: +1 paspas.',
     base: { cd: 1, dmg: 9, orbitR: 30, rot: 2.6 },
     perLvl: { dmg: 3.5, orbitR: 2, rot: 0.22 }
+  },
+
+  // ── karakter oto vuruş varyantları (dükkân/başarımla açılır) ──
+  kemer: {
+    name: 'KEMER FIRLATMA', kind: 'proj', vis: 'kemer', boom: true,
+    desc: 'Şampiyonluk kemeri gidip gelir, yolundaki herkesi biçer.',
+    lvlDesc: 'Hasar ve hız artar. SV3/SV5: +1 kemer.',
+    base: { cd: 1.6, dmg: 10, spd: 150, pierce: 99 },
+    perLvl: { cd: -0.09, dmg: 4, spd: 8 }
+  },
+  salto: {
+    name: 'SALTO ŞOKU', kind: 'cone', col: 'red',
+    desc: 'İleri takla: önündekileri sert şekilde mindere gömer.',
+    lvlDesc: 'Menzil, açı ve hasar artar.',
+    base: { cd: 1.7, dmg: 12, range: 32, arc: 1.1, kb: 260 },
+    perLvl: { cd: -0.09, dmg: 4.5, range: 4, arc: 0.1 }
+  },
+  korna: {
+    name: 'KORNA DALGASI', kind: 'ring', col: 'yellow',
+    desc: 'Kulak patlatan korna halkası müşterileri savurur.',
+    lvlDesc: 'Menzil ve hasar artar. SV4: +1 halka.',
+    base: { cd: 2.0, dmg: 5, maxR: 40, kb: 180 },
+    perLvl: { cd: -0.12, dmg: 2, maxR: 7 }
+  },
+  lastik: {
+    name: 'LASTİK YAKMA', kind: 'cloud', trail: true, col: 'orange',
+    desc: 'Arkanda yanan lastik izi bırakırsın. Drift!',
+    lvlDesc: 'Hasar, iz süresi ve alan artar.',
+    base: { cd: 0.9, dps: 6, radius: 14, dur: 2.5, maxClouds: 6 },
+    perLvl: { cd: -0.05, dps: 2, radius: 1.5, dur: 0.25 }
+  },
+  mikrofon: {
+    name: 'MİKROFON ÇEVİRME', kind: 'orbit', vis: 'mic', single: true,
+    desc: 'Kablolu mikrofon başının etrafında ölümcül döner.',
+    lvlDesc: 'Hasar, menzil ve dönüş hızı artar.',
+    base: { cd: 1, dmg: 14, orbitR: 34, rot: 3.2 },
+    perLvl: { dmg: 5, orbitR: 2.5, rot: 0.25 }
+  },
+  basdrop: {
+    name: 'BAS DROP', kind: 'pulse', atCrowd: true, col: 'purple',
+    desc: 'Bas patlaması en kalabalık noktaya iner.',
+    lvlDesc: 'Hasar ve alan artar.',
+    base: { cd: 2.6, dmg: 14, radius: 30, kb: 200 },
+    perLvl: { cd: -0.15, dmg: 5, radius: 4 }
+  },
+  soru: {
+    name: 'SORU YAĞMURU', kind: 'homing', vis: 'soru',
+    desc: 'Uçan sorular müşterileri bulur ve bunaltır.',
+    lvlDesc: 'Hasar ve soru sayısı artar.',
+    base: { cd: 2.1, dmg: 9, count: 3, spd: 110 },
+    perLvl: { cd: -0.12, dmg: 3, count: 0.35 }
+  },
+  gaz: {
+    name: 'GAZ BULUTU', kind: 'cloud', col: 'green',
+    desc: 'Dev, ağır, utanç verici bir bulut. Kimse yaklaşamaz.',
+    lvlDesc: 'Alan, süre ve hasar artar.',
+    base: { cd: 3.0, dps: 7, radius: 26, dur: 4, maxClouds: 2 },
+    perLvl: { cd: -0.16, dps: 2.5, radius: 3, dur: 0.4 }
+  },
+  fatura: {
+    name: 'FATURA KESME', kind: 'proj', vis: 'fatura',
+    desc: 'Kesilen faturalar müşterileri delip geçer.',
+    lvlDesc: 'Hasar ve delme artar. SV3/SV5: +1 fatura.',
+    base: { cd: 1.0, dmg: 9, spd: 230, pierce: 3 },
+    perLvl: { cd: -0.06, dmg: 3, pierce: 0.5 }
+  },
+  muhur: {
+    name: 'VERGİ MÜHRÜ', kind: 'thrown', stun: 0.5,
+    desc: 'Resmi mühür: damgalanan sersemler.',
+    lvlDesc: 'Hasar ve alan artar. SV3/SV5: +1 mühür.',
+    base: { cd: 1.8, dmg: 12, splash: 15 },
+    perLvl: { cd: -0.1, dmg: 4.5, splash: 2 }
+  },
+  forklift: {
+    name: 'FORKLİFT SEFERİ', kind: 'car', vis: 'fork',
+    desc: 'Forklift depodan geçer; ne bulursa taşır.',
+    lvlDesc: 'Hasar artar, bekleme düşer. SV4: çift sefer!',
+    base: { cd: 5.2, dmg: 26, kb: 260, band: 16 },
+    perLvl: { cd: -0.4, dmg: 7 }
+  },
+  kolibandi: {
+    name: 'KOLİ BANDI', kind: 'orbit', vis: 'koli',
+    desc: 'Etrafında dönen koli hattı: üretim durmaz.',
+    lvlDesc: 'Hasar ve hız artar. SV4/SV6: +1 koli.',
+    base: { cd: 1, dmg: 8, orbitR: 28, rot: 2.4 },
+    perLvl: { dmg: 3, orbitR: 2.5, rot: 0.2 }
   }
 };
 const WEAPON_MAX_LVL = 6;
@@ -222,13 +317,30 @@ const EVOLUTIONS = {
   wave:   { need: 'klavye',   needLvl: 2, name: 'STADYUM KONSERİ',    desc: 'Dev nota halkaları sahneyi inletir ve sersemletir.' },
   burp:   { need: 'robotkol', needLvl: 2, name: 'SONİK GEĞİRTİ',      desc: '360 derece ses patlaması. Rezalet ama etkili.' },
   puff:   { need: 'miknatis', needLvl: 2, name: 'SİS MAKİNESİ',       desc: 'Seni takip eden dev buhar bulutu.' },
-  box:    { need: 'drone',    needLvl: 1, name: 'KARGO FİLOSU',       desc: 'Drone filosu gökten koli yağdırır.' }
+  box:    { need: 'drone',    needLvl: 1, name: 'KARGO FİLOSU',       desc: 'Drone filosu gökten koli yağdırır.' },
+  // varyant vuruşların evrimleri
+  kemer:     { need: 'klavye',   needLvl: 2, name: 'ALTIN KEMER',        desc: 'Kemer daha hızlı döner, hasar patlar.' },
+  salto:     { need: 'kahve',    needLvl: 2, name: 'TURBO SALTO',        desc: 'Peş peşe salto: alan ve hasar büyür.' },
+  korna:     { need: 'robotkol', needLvl: 2, name: 'BASS KORNA',         desc: 'Kulak zarı yırtan devasa halkalar.' },
+  lastik:    { need: 'miknatis', needLvl: 2, name: 'DRİFT USTASI',       desc: 'İz daha geniş yanar, daha uzun kalır.' },
+  mikrofon:  { need: 'prim',     needLvl: 2, name: 'PLATİN MİKROFON',    desc: 'Mikrofon devleşir, sahne senindir.' },
+  basdrop:   { need: 'drone',    needLvl: 1, name: 'FESTİVAL MODU',      desc: 'Bas patlamaları sahneyi yıkar.' },
+  soru:      { need: 'klavye',   needLvl: 2, name: 'SINAV HAFTASI',      desc: 'Soru yağmuru sağanağa döner.' },
+  gaz:       { need: 'sigorta',  needLvl: 2, name: 'KİMYASAL TEHLİKE',   desc: 'Bulut devleşir; bölge tahliye edilir.' },
+  fatura:    { need: 'prim',     needLvl: 2, name: 'İCRA TAKİBİ',        desc: 'Faturalar seri ve acımasız kesilir.' },
+  muhur:     { need: 'robotkol', needLvl: 2, name: 'KIRMIZI MÜHÜR',      desc: 'Dev mühür: damgalanan kalkamaz.' },
+  forklift:  { need: 'kahve',    needLvl: 2, name: 'EKSPRES SEFER',      desc: 'Forkliftler aralıksız sefer yapar.' },
+  kolibandi: { need: 'miknatis', needLvl: 2, name: 'OTOMASYON HATTI',    desc: 'Koli hattı tam kapasite döner.' }
 };
 
-// ─── Aktif yetenekler (SPACE): karaktere özel, SV1-5 ─────────
+// ─── Aktif yetenekler (SPACE): düz kayıt, id → tanım, SV1-5 ──
+// kind: dash | turbo | burst | freezeall | taxsweep | boxrain
+//     | shieldburst | carstrike | decoy | slowmo | vacuum
 const SKILL_MAX_LVL = 5;
 const SKILLS = {
-  ahmet: {
+  // ── varsayılanlar (baştan açık) ──
+  minder: {
+    char: 'ahmet', kind: 'dash', icon: 'sk_ahmet',
     name: 'MİNDER DAYAĞI',
     desc: 'İleri atılır, yolundaki müşterileri mindere çakar.',
     lvlDesc: 'Hasar, menzil ve sersemletme artar.',
@@ -236,7 +348,8 @@ const SKILLS = {
     base: { dmg: 32, range: 75, stun: 1.2 },
     perLvl: { dmg: 16, range: 12, stun: 0.2, cd: -0.5 }
   },
-  ali: {
+  elfren: {
+    char: 'ali', kind: 'turbo', icon: 'sk_ali',
     name: 'EL FRENİ ŞOV',
     desc: 'Kısa süre ışık hızında: değdiğini ezer, hasar almaz.',
     lvlDesc: 'Süre ve ezme hasarı artar.',
@@ -244,15 +357,17 @@ const SKILLS = {
     base: { dur: 1.6, dmg: 20 },
     perLvl: { dur: 0.3, dmg: 9, cd: -0.5 }
   },
-  bekir: {
+  akustik: {
+    char: 'bekir', kind: 'burst', icon: 'sk_bekir', col: 'purple',
     name: 'AKUSTİK PATLAMA',
     desc: 'Dev nota dalgası: herkesi savurur ve sersemletir.',
     lvlDesc: 'Alan, hasar ve sersemletme artar.',
     cd: 13,
-    base: { r: 90, dmg: 26, stun: 1.4 },
+    base: { r: 90, dmg: 26, stun: 1.4, kb: 300 },
     perLvl: { r: 15, dmg: 12, stun: 0.25, cd: -0.5 }
   },
-  can: {
+  sorubomb: {
+    char: 'can', kind: 'freezeall', icon: 'sk_can',
     name: 'SORU BOMBARDIMANI',
     desc: 'Ekrandaki HERKES soruya boğulur ve donar.',
     lvlDesc: 'Donma süresi ve hasar artar.',
@@ -260,7 +375,8 @@ const SKILLS = {
     base: { dur: 2.2, dmg: 10 },
     perLvl: { dur: 0.4, dmg: 7, cd: -0.6 }
   },
-  erkan: {
+  vergi: {
+    char: 'erkan', kind: 'taxsweep', icon: 'sk_erkan',
     name: 'VERGİ DENETİMİ',
     desc: 'Yakın müşterilerden para söker, çipleri mıknatıslar.',
     lvlDesc: 'Alan, hasar ve sökülen para artar.',
@@ -268,15 +384,138 @@ const SKILLS = {
     base: { r: 85, dmg: 24, coins: 2 },
     perLvl: { r: 12, dmg: 11, coins: 1, cd: -0.5 }
   },
-  berker: {
+  sevkiyat: {
+    char: 'berker', kind: 'boxrain', icon: 'sk_berker',
     name: 'SEVKİYAT YAĞMURU',
     desc: 'Baktığın yöne koli bombardımanı. Nişan sende!',
     lvlDesc: 'Koli sayısı ve hasar artar.',
     cd: 12,
     base: { n: 6, dmg: 20, splash: 22 },
     perLvl: { n: 2, dmg: 8, splash: 2, cd: -0.5 }
+  },
+
+  // ── açılabilir varyantlar ──
+  kafagogus: {
+    char: 'ahmet', kind: 'burst', icon: 'sk_kafa', col: 'red',
+    name: 'KAFA GÖĞÜS',
+    desc: 'Yakın çevreye yıkıcı kafa darbesi: az alan, dev hasar.',
+    lvlDesc: 'Hasar ve sersemletme artar.',
+    cd: 10,
+    base: { r: 55, dmg: 50, stun: 0.8, kb: 340 },
+    perLvl: { r: 6, dmg: 20, stun: 0.15, cd: -0.4 }
+  },
+  sampiyonk: {
+    char: 'ahmet', kind: 'shieldburst', icon: 'sk_kalkan',
+    name: 'ŞAMPİYON DURUŞU',
+    desc: 'Kalkan kuşanır, etrafını savurur. Ringin sahibi belli.',
+    lvlDesc: 'Kalkan süresi ve itiş hasarı artar.',
+    cd: 14,
+    base: { shield: 4, r: 60, dmg: 20 },
+    perLvl: { shield: 0.6, r: 6, dmg: 8, cd: -0.5 }
+  },
+  konvoy: {
+    char: 'ali', kind: 'carstrike', icon: 'sk_konvoy',
+    name: 'KONVOY ÇAĞIR',
+    desc: 'Dört bir yandan şirket araçları fırlar.',
+    lvlDesc: 'Araç sayısı ve hasar artar.',
+    cd: 13,
+    base: { n: 4, dmg: 24 },
+    perLvl: { n: 1, dmg: 8, cd: -0.5 }
+  },
+  yedek: {
+    char: 'ali', kind: 'decoy', icon: 'sk_yedek',
+    name: 'YEDEK ARAÇ',
+    desc: 'Korna çalan sahte hedef bırakır; sonunda patlar.',
+    lvlDesc: 'Süre ve patlama hasarı artar.',
+    cd: 12,
+    base: { dur: 3.5, dmg: 26, r: 45 },
+    perLvl: { dur: 0.4, dmg: 10, r: 4, cd: -0.5 }
+  },
+  balad: {
+    char: 'bekir', kind: 'slowmo', icon: 'sk_balad',
+    name: 'AĞIR BALAD',
+    desc: 'Duygusal şarkı: tüm müşteriler ağır çekime düşer.',
+    lvlDesc: 'Süre ve yavaşlatma artar.',
+    cd: 13,
+    base: { dur: 3, slow: 0.45 },
+    perLvl: { dur: 0.5, slow: 0.04, cd: -0.5 }
+  },
+  hayran: {
+    char: 'bekir', kind: 'vacuum', icon: 'sk_hayran', col: 'pink',
+    name: 'HAYRAN KİTLESİ',
+    desc: 'Müşterileri kendine çeker; nota fırtınası vurur.',
+    lvlDesc: 'Alan ve hasar artar.',
+    cd: 12,
+    base: { r: 110, dmg: 18, pull: 260 },
+    perLvl: { r: 10, dmg: 8, cd: -0.5 }
+  },
+  klon: {
+    char: 'can', kind: 'decoy', icon: 'sk_klon',
+    name: 'SAHTE CAN',
+    desc: 'Soru soran bir klon bırakır; dayanamayıp patlar.',
+    lvlDesc: 'Süre ve patlama hasarı artar.',
+    cd: 12,
+    base: { dur: 4, dmg: 22, r: 42 },
+    perLvl: { dur: 0.5, dmg: 9, r: 4, cd: -0.5 }
+  },
+  geger: {
+    char: 'can', kind: 'burst', icon: 'sk_geger', col: 'green',
+    name: 'MEGA GEĞİRTİ',
+    desc: 'Tarihe geçecek bir geğirti: herkes savrulur.',
+    lvlDesc: 'Alan ve hasar artar.',
+    cd: 11,
+    base: { r: 70, dmg: 30, stun: 0.5, kb: 320 },
+    perLvl: { r: 9, dmg: 12, cd: -0.4 }
+  },
+  burokrasi: {
+    char: 'erkan', kind: 'slowmo', icon: 'sk_burokrasi',
+    name: 'BÜROKRASİ',
+    desc: 'Evrak işine boğulan müşteriler yavaşlar.',
+    lvlDesc: 'Süre ve yavaşlatma artar.',
+    cd: 13,
+    base: { dur: 3.5, slow: 0.5 },
+    perLvl: { dur: 0.5, slow: 0.04, cd: -0.5 }
+  },
+  butce: {
+    char: 'erkan', kind: 'shieldburst', icon: 'sk_butce',
+    name: 'BÜTÇE KALKANI',
+    desc: 'Bütçe onaylandı: kalkan + evrak fırtınası.',
+    lvlDesc: 'Kalkan süresi ve hasar artar.',
+    cd: 14,
+    base: { shield: 5, r: 55, dmg: 16 },
+    perLvl: { shield: 0.6, r: 6, dmg: 7, cd: -0.5 }
+  },
+  forkonvoy: {
+    char: 'berker', kind: 'carstrike', icon: 'sk_forkonvoy',
+    name: 'FORKLİFT FİLOSU',
+    desc: 'Depodaki tüm forkliftler aynı anda sefere çıkar.',
+    lvlDesc: 'Forklift sayısı ve hasar artar.',
+    cd: 13,
+    base: { n: 3, dmg: 30 },
+    perLvl: { n: 1, dmg: 9, cd: -0.5 }
+  },
+  vakum: {
+    char: 'berker', kind: 'vacuum', icon: 'sk_vakum', col: 'orange',
+    name: 'VAKUM PAKETLEME',
+    desc: 'Dev vakum: müşterileri çeker ve paketler.',
+    lvlDesc: 'Alan ve hasar artar.',
+    cd: 12,
+    base: { r: 100, dmg: 20, pull: 280 },
+    perLvl: { r: 10, dmg: 8, cd: -0.5 }
   }
 };
+
+// ─── Teknik kataloğu: karakter → seçilebilir vuruş/yetenek listeleri ───
+// İlk giriş baştan açık; diğerleri dükkândan (TECH_COST) ya da başarımla açılır.
+const TECHS = {
+  ahmet:  { weapons: ['suplex', 'kemer', 'salto'],       skills: ['minder', 'kafagogus', 'sampiyonk'] },
+  ali:    { weapons: ['car', 'korna', 'lastik'],         skills: ['elfren', 'konvoy', 'yedek'] },
+  bekir:  { weapons: ['wave', 'mikrofon', 'basdrop'],    skills: ['akustik', 'balad', 'hayran'] },
+  can:    { weapons: ['burp', 'soru', 'gaz'],            skills: ['sorubomb', 'klon', 'geger'] },
+  erkan:  { weapons: ['puff', 'fatura', 'muhur'],        skills: ['vergi', 'burokrasi', 'butce'] },
+  berker: { weapons: ['box', 'forklift', 'kolibandi'],   skills: ['sevkiyat', 'forkonvoy', 'vakum'] }
+};
+const TECH_COST = [0, 60, 120];   // varyant sırasına göre dükkân fiyatı
 
 // ─── Pasif geliştirme itemleri ───────────────────────────────
 const ITEMS = {

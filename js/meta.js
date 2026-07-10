@@ -92,12 +92,39 @@ const Meta = {
     return true;
   },
 
-  // silah kilidi: meta yükseltmesi gerektiren silahlar
+  // silah kilidi: meta yükseltmesi gerektirenler + teknik varyantları
   weaponUnlocked(wid) {
     for (const id in META_UPGRADES) {
       if (META_UPGRADES[id].weapon === wid) return this.lvl(id) > 0;
     }
+    // karakter varyantı (TECHS listesinde 0. sıra hariç) kilitliyse koşuda çıkmaz
+    for (const c in TECHS) {
+      const idx = TECHS[c].weapons.indexOf(wid);
+      if (idx > 0) return this.unlocked('t_' + wid);
+    }
     return true;
+  },
+
+  // ── teknik (vuruş/yetenek varyantı) kilit ve loadout API'si ──
+  techUnlocked(charId, listName, id) {
+    const idx = TECHS[charId][listName].indexOf(id);
+    return idx === 0 || this.unlocked('t_' + id);
+  },
+
+  // seçili loadout'u doğrulayarak döner (kilitliyse varsayılana düşer)
+  loadout(charId) {
+    const t = TECHS[charId];
+    const lo = (this.data.loadout && this.data.loadout[charId]) || {};
+    return {
+      w: t.weapons.includes(lo.w) && this.techUnlocked(charId, 'weapons', lo.w) ? lo.w : t.weapons[0],
+      s: t.skills.includes(lo.s) && this.techUnlocked(charId, 'skills', lo.s) ? lo.s : t.skills[0]
+    };
+  },
+
+  setLoadout(charId, w, s) {
+    if (!this.data.loadout) this.data.loadout = {};
+    this.data.loadout[charId] = { w, s };
+    this.save();
   },
 
   // ── kostümler ──

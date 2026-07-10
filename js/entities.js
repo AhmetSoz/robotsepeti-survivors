@@ -20,6 +20,7 @@ function makeWeapon(id) {
 // ── Oyuncu ──
 function makePlayer(charId) {
   const def = CHARACTERS[charId];
+  const lo = Meta.loadout(charId);   // seçili oto vuruş + yetenek
   // dükkân yükseltmesi: kalıcı can bonusu
   const mhp = Math.round(def.hp * (1 + Meta.lvl('can') * 0.08));
   const p = {
@@ -29,12 +30,12 @@ function makePlayer(charId) {
     facing: { x: 1, y: 0 },
     moving: false, flip: false,
     animT: 0, invuln: 0, hurtFlash: 0, dustT: 0,
-    weapons: [makeWeapon(def.weapon)],
+    weapons: [makeWeapon(lo.w)],
     items: {},          // itemId -> seviye
     droneAngle: 0,
     questionT: 3,       // Can pasifi sayacı
     // aktif yetenek + robot kol
-    skill: { lvl: 1, cd: 4, wasReady: false },
+    skill: { id: lo.s, lvl: 1, cd: 4, wasReady: false },
     dashS: null, turboT: 0, turboHit: null, magnetBoostT: 0,
     shieldT: 0, turboPickT: 0, afterT: 0, lean: 0, turnT: 0,
     armT: 1, armAnim: null,
@@ -89,7 +90,7 @@ function weaponStats(p, w) {
 }
 
 function skillStats(p) {
-  const d = SKILLS[p.charId];
+  const d = SKILLS[p.skill.id];
   const l = p.skill.lvl - 1;
   const s = { cd: d.cd };
   for (const k in d.base) s[k] = d.base[k] + (d.perLvl[k] || 0) * l;
@@ -230,14 +231,15 @@ function updatePlayer(dt) {
 
 // ── Aktif yetenek kullanımı ──
 function useSkill(p) {
+  const def = SKILLS[p.skill.id];
   const s = skillStats(p);
   p.skill.cd = s.cd;
-  Game.banner = { txt: SKILLS[p.charId].name + '!', t: 2.2 };
+  Game.banner = { txt: def.name + '!', t: 2.2 };
   Achievements.event('skillUse');
   Achievements.run.skillUsedFlag = 1;   // "pasif direniş" gizli başarımı bozulur
 
-  switch (p.charId) {
-    case 'ahmet': {
+  switch (def.kind) {
+    case 'dash': {
       // minder dayağı: ileri atılış
       let fx = p.facing.x, fy = p.facing.y;
       if (!fx && !fy) fx = 1;
@@ -248,35 +250,108 @@ function useSkill(p) {
       Sfx.play('dash'); Sfx.play('suplex');
       break;
     }
-    case 'ali': {
+    case 'turbo': {
       p.turboT = s.dur;
       p.turboDmg = s.dmg;
       p.turboHit = new Set();
       Sfx.play('horn'); Sfx.play('dash');
       break;
     }
-    case 'bekir': {
-      // akustik patlama: dev itiş halkası
-      Game.shocks.push({ x: p.x, y: p.y - 6, r: s.r, t: 0, col: COL.purple });
-      Game.rings.push({ x: p.x, y: p.y - 6, r: 6, maxR: s.r, dmg: 0, hit: new Set(), delay: 0, stun: 0 });
+    case 'burst': {
+      // patlama: dev itiş halkası (renk yeteneğe göre)
+      const bcol = def.col ? COL[def.col] : COL.purple;
+      Game.shocks.push({ x: p.x, y: p.y - 6, r: s.r, t: 0, col: bcol });
+      Game.rings.push({ x: p.x, y: p.y - 6, r: 6, maxR: s.r, dmg: 0, hit: new Set(), delay: 0, stun: 0, col: bcol });
       for (const e of Game.enemies) {
         if (e.spawnT > 0) continue;
         if (dist2(p.x, p.y, e.x, e.y) < s.r * s.r) {
           const a = Math.atan2(e.y - p.y, e.x - p.x);
-          damageEnemy(e, s.dmg, Math.cos(a) * 300, Math.sin(a) * 300);
-          e.stun = Math.max(e.stun, s.stun);
+          damageEnemy(e, s.dmg, Math.cos(a) * (s.kb || 300), Math.sin(a) * (s.kb || 300));
+          e.stun = Math.max(e.stun, s.stun || 0);
+          e.bounceT = 0.3;
         }
       }
       for (let i = 0; i < 14; i++) {
         const a = rand(TAU);
         addPart({ x: p.x, y: p.y - 10, vx: Math.cos(a) * rand(40, 90), vy: Math.sin(a) * rand(30, 60) - 20,
-          dur: 0.7, type: 'note', col: pick([COL.purple, COL.pink, COL.teal]) });
+          dur: 0.7, type: def.char === 'bekir' ? 'note' : 'puff', col: pick([bcol, COL.white, COL.yellow]), size: 3 });
       }
       Game.shake = Math.max(Game.shake, 5);
       Sfx.play('wave'); Sfx.play('explode');
       break;
     }
-    case 'can': {
+    case 'shieldburst': {
+      // kalkan kuşan + çevreyi it
+      p.shieldT = Math.max(p.shieldT, s.shield);
+      Game.shocks.push({ x: p.x, y: p.y - 6, r: s.r, t: 0, col: COL.teal });
+      for (const e of Game.enemies) {
+        if (e.spawnT > 0) continue;
+        if (dist2(p.x, p.y, e.x, e.y) < s.r * s.r) {
+          const a = Math.atan2(e.y - p.y, e.x - p.x);
+          damageEnemy(e, s.dmg, Math.cos(a) * 260, Math.sin(a) * 260);
+        }
+      }
+      Game.flashT = 0.25; Game.flashCol = '44,232,245';
+      Sfx.play('shield'); Sfx.play('suplex');
+      break;
+    }
+    case 'carstrike': {
+      // araç/forklift baskını: dört yandan konvoy
+      const vis = def.char === 'berker' ? 'fork' : 'car';
+      for (let i = 0; i < Math.round(s.n); i++) {
+        const d = i % 2 ? 1 : -1;
+        Game.cars.push({
+          x: p.x - d * (280 + (i >> 1) * 70), y: p.y + (i - s.n / 2) * 26 + rand(-6, 6),
+          dir: d, spd: vis === 'fork' ? 220 : 260, dmg: s.dmg, kb: 240, band: 15,
+          hit: new Set(), life: 3.2, vis
+        });
+      }
+      Sfx.play('horn'); Sfx.play('akin');
+      break;
+    }
+    case 'slowmo': {
+      // ağır çekim: tüm müşteriler yavaşlar
+      Game.slowT = s.dur;
+      Game.slowK = 1 - s.slow;
+      Game.flashT = 0.3; Game.flashCol = '68,100,220';
+      for (const e of Game.enemies) {
+        if (Math.random() < 0.4) addFloat(e.x, e.y - 14 * e.type.scale, 'ZZZ', COL.blueDark);
+      }
+      Sfx.play('teleport');
+      break;
+    }
+    case 'decoy': {
+      // sahte hedef: düşmanlar ona koşar, süre bitince patlar
+      Game.decoy = { x: p.x, y: p.y, t: 0, dur: s.dur, dmg: s.dmg, r: s.r, charId: p.charId };
+      Sfx.play('click'); Sfx.play('question');
+      break;
+    }
+    case 'vacuum': {
+      // vakum: müşterileri kendine çeker + hasar
+      let n = 0;
+      for (const e of Game.enemies) {
+        if (e.spawnT > 0 || e.type.boss || e.type.breakable) continue;
+        if (dist2(p.x, p.y, e.x, e.y) < s.r * s.r) {
+          const a = Math.atan2(p.y - e.y, p.x - e.x);
+          e.kx += Math.cos(a) * (s.pull || 260);
+          e.ky += Math.sin(a) * (s.pull || 260);
+          damageEnemy(e, s.dmg, 0, 0, true);
+          n++;
+        }
+      }
+      if (n) addFloat(p.x, p.y - 26, n + ' MÜŞTERİ ÇEKİLDİ!', def.col ? COL[def.col] : COL.pink, true);
+      const vcol = def.col ? COL[def.col] : COL.pink;
+      Game.shocks.push({ x: p.x, y: p.y - 6, r: s.r, t: 0, col: vcol });
+      for (let i = 0; i < 16; i++) {
+        const a = (i / 16) * TAU;
+        // içeri akan parçacıklar
+        addPart({ x: p.x + Math.cos(a) * s.r * 0.8, y: p.y - 6 + Math.sin(a) * s.r * 0.45,
+          vx: -Math.cos(a) * 90, vy: -Math.sin(a) * 50, dur: 0.4, type: 'spark', col: vcol });
+      }
+      Sfx.play('magnet'); Sfx.play('suplex');
+      break;
+    }
+    case 'freezeall': {
       // soru bombardımanı: ekrandaki herkes donar
       let frozen = 0;
       for (const e of Game.enemies) {
@@ -292,7 +367,7 @@ function useSkill(p) {
       Sfx.play('question'); Sfx.play('teleport');
       break;
     }
-    case 'erkan': {
+    case 'taxsweep': {
       // vergi denetimi: para söküp çipleri mıknatısla
       let took = 0;
       for (const e of Game.enemies) {
@@ -312,7 +387,7 @@ function useSkill(p) {
       Sfx.play('coin'); Sfx.play('chest');
       break;
     }
-    case 'berker': {
+    case 'boxrain': {
       // sevkiyat yağmuru: BAKTIĞIN yöne koli bombardımanı (oyuncu nişan alır)
       let fx = p.facing.x, fy = p.facing.y;
       if (!fx && !fy) fx = p.flip ? -1 : 1;
@@ -396,21 +471,23 @@ function fireWeapons(dt) {
   const p = Game.player;
   updateRobotArm(p, dt);
   for (const w of p.weapons) {
+    const def = WEAPONS[w.id];
     const s = weaponStats(p, w);
-    if (w.id === 'mop') { updateMop(w, s, dt); continue; }
+    // davranış şablonuna (kind) göre ateşleme — yeni silah = veri satırı
+    if (def.kind === 'orbit') { updateMop(w, s, dt); continue; }
     w.cd -= dt;
     if (w.echo > 0) { w.echo -= dt; if (w.echo <= 0) suplexPulse(s, w); }
     if (w.cd <= 0) {
       w.cd = s.cd;
-      switch (w.id) {
-        case 'suplex': suplexPulse(s, w); if (w.lvl >= 6 || w.evolved) w.echo = 0.28; break;
+      switch (def.kind) {
+        case 'pulse': suplexPulse(s, w); if (w.lvl >= 6 || w.evolved) w.echo = 0.28; break;
         case 'car': fireCar(s, w); break;
-        case 'wave': fireWave(s, w); break;
-        case 'burp': fireBurp(s); break;
-        case 'puff': firePuff(s, w); break;
-        case 'box': fireBox(s, w); break;
-        case 'zimba': fireZimba(s, w); break;
-        case 'mail': fireMail(s, w); break;
+        case 'ring': fireWave(s, w); break;
+        case 'cone': fireBurp(s, w); break;
+        case 'cloud': firePuff(s, w); break;
+        case 'thrown': fireBox(s, w); break;
+        case 'proj': fireZimba(s, w); break;
+        case 'homing': fireMail(s, w); break;
       }
     }
   }
@@ -436,26 +513,41 @@ function fireWeapons(dt) {
 
 function suplexPulse(s, w) {
   const p = Game.player;
+  const def = w ? WEAPONS[w.id] : null;
+  // merkez: normalde oyuncu; atCrowd (BAS DROP) en kalabalık noktaya iner
+  let cx = p.x, cy = p.y;
+  if (def && def.atCrowd) {
+    let best = null, bestN = -1;
+    for (const e of Game.enemies) {
+      if (e.spawnT > 0 || e.type.breakable) continue;
+      if (dist2(p.x, p.y, e.x, e.y) > 150 * 150) continue;
+      let n2 = 0;
+      for (const o of Game.enemies) if (dist2(e.x, e.y, o.x, o.y) < 45 * 45) n2++;
+      if (n2 > bestN) { bestN = n2; best = e; }
+    }
+    if (best) { cx = best.x; cy = best.y; }
+  }
   // her 4. vuruş ŞAMPİYON VURUŞU: daha büyük, daha sert
   if (w) w.pulseN = (w.pulseN || 0) + 1;
   const champ = w && w.pulseN % 4 === 0;
   if (champ) Achievements.event('champ');
   const radius = s.radius * (champ ? 1.5 : 1);
   const dmg = s.dmg * (champ ? 1.6 : 1);
+  const baseCol = def && def.col ? COL[def.col] : undefined;
 
-  Game.shocks.push({ x: p.x, y: p.y - 6, r: radius, t: 0, col: champ ? COL.gold : undefined });
-  Game.decals.push({ x: p.x, y: p.y, r: radius * 0.7, t: 0, dur: champ ? 3 : 1.8 });
+  Game.shocks.push({ x: cx, y: cy - 6, r: radius, t: 0, col: champ ? COL.gold : baseCol });
+  Game.decals.push({ x: cx, y: cy, r: radius * 0.7, t: 0, dur: champ ? 3 : 1.8 });
   Game.shake = Math.max(Game.shake, champ ? 4 : 2);
   Game.kickY = Math.min(4, Game.kickY + (champ ? 3 : 1.5));
   Sfx.play(champ ? 'bigslam' : 'suplex');
   if (champ) {
-    addFloat(p.x, p.y - 26, 'ŞAMPİYON!', COL.gold, true);
+    addFloat(cx, cy - 26, 'ŞAMPİYON!', COL.gold, true);
     Game.freeze = Math.max(Game.freeze, 0.05);
   }
 
   for (const e of Game.enemies) {
-    if (dist2(p.x, p.y, e.x, e.y) < radius * radius) {
-      const a = Math.atan2(e.y - p.y, e.x - p.x);
+    if (dist2(cx, cy, e.x, e.y) < radius * radius) {
+      const a = Math.atan2(e.y - cy, e.x - cx);
       damageEnemy(e, dmg, Math.cos(a) * s.kb, Math.sin(a) * s.kb);
       e.bounceT = 0.35;   // müşteriler havaya zıplar
       if (w && w.evolved) e.stun = Math.max(e.stun, 0.5);
@@ -464,9 +556,9 @@ function suplexPulse(s, w) {
   const n = Math.round(radius / 3);
   for (let i = 0; i < n; i++) {
     const a = (i / n) * TAU + rand(0.4);
-    addPart({ x: p.x + Math.cos(a) * radius * 0.75, y: p.y - 4 + Math.sin(a) * radius * 0.42,
+    addPart({ x: cx + Math.cos(a) * radius * 0.75, y: cy - 4 + Math.sin(a) * radius * 0.42,
       vx: Math.cos(a) * rand(25, 55), vy: -rand(10, 45), dur: 0.4, type: 'puff',
-      col: champ && i % 3 === 0 ? COL.gold : COL.greyLight, size: champ ? 4 : 3 });
+      col: champ && i % 3 === 0 ? COL.gold : (baseCol || COL.greyLight), size: champ ? 4 : 3 });
   }
 }
 
@@ -483,13 +575,14 @@ function fireCar(s, w) {
   const lanes = [0, -27, 27, -50];
   let laneIdx = 0;
   const stagger = { '1': 0, '-1': 0 };
+  const vis = WEAPONS[w.id].vis || 'car';
   const mk = d => {
     const stag = stagger[String(d)];
     stagger[String(d)] += 80;
     Game.cars.push({
       x: p.x - d * (280 + stag), y: p.y + lanes[laneIdx++ % lanes.length] + rand(-4, 4),
-      dir: d, spd: 250, dmg: s.dmg, kb: s.kb, band: s.band,
-      hit: new Set(), life: 3 + stag / 250
+      dir: d, spd: vis === 'fork' ? 210 : 250, dmg: s.dmg, kb: s.kb, band: s.band,
+      hit: new Set(), life: 3 + stag / 250, vis
     });
   };
   mk(dir);
@@ -501,22 +594,29 @@ function fireCar(s, w) {
 function fireWave(s, w) {
   const p = Game.player;
   const lvl = w.lvl;
-  Sfx.play('wave');
+  const def = WEAPONS[w.id];
+  const col = def.col ? COL[def.col] : null;
+  Sfx.play(w.id === 'korna' ? 'horn' : 'wave');
   const stun = w.evolved ? 0.3 : 0;
-  const mk = delay => Game.rings.push({ x: p.x, y: p.y - 6, r: 6, maxR: s.maxR, dmg: s.dmg, hit: new Set(), delay, stun });
+  const kb = s.kb || 60;
+  const mk = delay => Game.rings.push({ x: p.x, y: p.y - 6, r: 6, maxR: s.maxR, dmg: s.dmg,
+    hit: new Set(), delay, stun, kb, col });
   mk(0);
   if (lvl >= 4) mk(0.18);
   if (lvl >= 6) mk(0.36);
-  addPart({ x: p.x + rand(-6, 6), y: p.y - 18, vx: rand(-8, 8), vy: -22, dur: 0.8, type: 'note', col: COL.purple });
+  addPart({ x: p.x + rand(-6, 6), y: p.y - 18, vx: rand(-8, 8), vy: -22, dur: 0.8,
+    type: 'note', col: col || COL.purple });
 }
 
-function fireBurp(s) {
+function fireBurp(s, w) {
   const p = Game.player;
+  const def = w ? WEAPONS[w.id] : WEAPONS.burp;
+  const col = def.col ? COL[def.col] : COL.green;
   let fx = p.facing.x, fy = p.facing.y;
   if (!fx && !fy) fx = 1;
   const ang = Math.atan2(fy, fx);
-  Sfx.play('burp');
-  Game.cones.push({ x: p.x, y: p.y - 6, ang, range: s.range, arc: s.arc, t: 0 });
+  Sfx.play(def === WEAPONS.salto ? 'dash' : 'burp');
+  Game.cones.push({ x: p.x, y: p.y - 6, ang, range: s.range, arc: s.arc, t: 0, col });
   for (const e of Game.enemies) {
     const d2 = dist2(p.x, p.y, e.x, e.y);
     if (d2 > s.range * s.range) continue;
@@ -525,22 +625,32 @@ function fireBurp(s) {
     if (diff > Math.PI) diff = TAU - diff;
     if (diff < s.arc / 2) {
       damageEnemy(e, s.dmg, Math.cos(ea) * s.kb, Math.sin(ea) * s.kb);
+      if (def === WEAPONS.salto) e.bounceT = 0.3;   // salto: havaya savurur
     }
   }
   for (let i = 0; i < 7; i++) {
     const a = ang + rand(-s.arc / 2, s.arc / 2);
     const sp = rand(50, 110);
     addPart({ x: p.x, y: p.y - 8, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, dur: 0.35,
-      type: 'puff', col: i % 2 ? COL.green : COL.yellow, size: 2 });
+      type: 'puff', col: i % 2 ? col : COL.yellow, size: 2 });
   }
 }
 
 function firePuff(s, w) {
   const p = Game.player;
+  const def = WEAPONS[w.id];
+  const col = def.col ? COL[def.col] : null;
   Sfx.play('puff');
-  const fx = p.facing.x || 1, fy = p.facing.y;
-  const cx = p.x + fx * 16 + rand(-6, 6), cy = p.y + fy * 16 + rand(-6, 6);
-  Game.clouds.push({ x: cx, y: cy, r: s.radius, dur: s.dur, t: 0, dps: s.dps, tick: 0, follow: w.evolved });
+  let cx, cy;
+  if (def.trail) {
+    // lastik yakma: iz tam ayağının altında kalır
+    cx = p.x + rand(-3, 3); cy = p.y + rand(-3, 3);
+  } else {
+    const fx = p.facing.x || 1, fy = p.facing.y;
+    cx = p.x + fx * 16 + rand(-6, 6); cy = p.y + fy * 16 + rand(-6, 6);
+  }
+  Game.clouds.push({ x: cx, y: cy, r: s.radius, dur: s.dur, t: 0, dps: s.dps, tick: 0,
+    follow: w.evolved && !def.trail, col });
   while (Game.clouds.length > s.maxClouds + 1) Game.clouds.shift();
 }
 
@@ -559,12 +669,14 @@ function fireBox(s, w) {
     if (sorted[i]) { tx = sorted[i].e.x + rand(-6, 6); ty = sorted[i].e.y + rand(-6, 6); }
     else { const a = rand(TAU); tx = p.x + Math.cos(a) * rand(40, 80); ty = p.y + Math.sin(a) * rand(40, 80); }
     // evrimleşmişse koliler gökten (drone filosundan) düşer
-    Game.boxes.push({ x0: p.x, y0: p.y - 10, tx, ty, t: 0, dur: 0.5, dmg: s.dmg, splash: s.splash, sky: w.evolved });
+    Game.boxes.push({ x0: p.x, y0: p.y - 10, tx, ty, t: 0, dur: 0.5, dmg: s.dmg, splash: s.splash,
+      sky: w.evolved, stun: WEAPONS[w.id].stun || 0, vis: w.id === 'muhur' ? 'muhur' : 'box' });
   }
 }
 
 function fireZimba(s, w) {
   const p = Game.player;
+  const def = WEAPONS[w.id];
   const count = 1 + (w.lvl >= 3 ? 1 : 0) + (w.lvl >= 5 ? 1 : 0);
   // en yakın müşteriye nişan al, kimse yoksa bakılan yöne
   let best = null, bd = 200 * 200;
@@ -578,31 +690,34 @@ function fireZimba(s, w) {
   Sfx.play('zimba');
   for (let i = 0; i < count; i++) {
     const a = ang + (i - (count - 1) / 2) * 0.14;
-    Game.projs.push({ type: 'staple', x: p.x, y: p.y - 8,
+    Game.projs.push({ type: def.vis || 'staple', x: p.x, y: p.y - 8,
       vx: Math.cos(a) * s.spd, vy: Math.sin(a) * s.spd,
-      dmg: s.dmg, pierce: Math.round(s.pierce), hit: new Set(), t: 0 });
+      dmg: s.dmg, pierce: Math.round(s.pierce), hit: new Set(), t: 0,
+      // bumerang (kemer): menzile gidince geri döner, dönüşte yeniden vurur
+      boom: def.boom ? { ox: p.x, oy: p.y - 8, out: 0.55, back: false } : null });
   }
 }
 
 function fireMail(s, w) {
   const p = Game.player;
+  const def = WEAPONS[w.id];
   const count = Math.round(s.count);
   const targets = Game.enemies.filter(e => e.spawnT <= 0 && dist2(p.x, p.y, e.x, e.y) < 230 * 230);
   if (!targets.length) return;
   Sfx.play('mail');
   for (let i = 0; i < count; i++) {
     const a = rand(TAU);
-    Game.projs.push({ type: 'mail', x: p.x, y: p.y - 10,
+    Game.projs.push({ type: def.vis || 'mail', x: p.x, y: p.y - 10,
       vx: Math.cos(a) * 60, vy: Math.sin(a) * 60,
-      spd: s.spd, dmg: s.dmg, target: pick(targets), t: 0 });
+      spd: s.spd, dmg: s.dmg, target: pick(targets), t: 0, homing: true });
   }
 }
 
-// Paspas: sürekli dönen yörünge silahı
+// Yörünge silahı (paspas/mikrofon/koli bandı): sürekli döner
 function updateMop(w, s, dt) {
   const p = Game.player;
   w.angle += s.rot * dt;
-  const count = 1 + (w.lvl >= 4 ? 1 : 0) + (w.lvl >= 6 ? 1 : 0);
+  const count = WEAPONS[w.id].single ? 1 : 1 + (w.lvl >= 4 ? 1 : 0) + (w.lvl >= 6 ? 1 : 0);
   for (let i = 0; i < count; i++) {
     const a = w.angle + (i / count) * TAU;
     const mx = p.x + Math.cos(a) * s.orbitR, my = p.y - 6 + Math.sin(a) * s.orbitR * 0.7;
@@ -670,10 +785,12 @@ function updateWeaponEntities(dt) {
       if (Math.abs(d - r.r) < 7) {
         r.hit.add(e.id);
         const a = Math.atan2(e.y - 6 - r.y, e.x - r.x);
-        if (r.dmg > 0) damageEnemy(e, r.dmg, Math.cos(a) * 60, Math.sin(a) * 60);
+        const kb = r.kb || 60;
+        if (r.dmg > 0) damageEnemy(e, r.dmg, Math.cos(a) * kb, Math.sin(a) * kb);
         if (r.stun) e.stun = Math.max(e.stun, r.stun);
         if (Math.random() < 0.3) {
-          addPart({ x: e.x, y: e.y - 14, vx: rand(-10, 10), vy: -25, dur: 0.6, type: 'note', col: COL.purple });
+          addPart({ x: e.x, y: e.y - 14, vx: rand(-10, 10), vy: -25, dur: 0.6,
+            type: 'note', col: r.col || COL.purple });
         }
       }
     }
@@ -696,7 +813,7 @@ function updateWeaponEntities(dt) {
         }
       }
       addPart({ x: cl.x + rand(-cl.r, cl.r) * 0.6, y: cl.y + rand(-cl.r, cl.r) * 0.4,
-        vx: rand(-6, 6), vy: -rand(4, 12), dur: 0.9, type: 'puff', col: COL.grey, size: 4 });
+        vx: rand(-6, 6), vy: -rand(4, 12), dur: 0.9, type: 'puff', col: cl.col || COL.grey, size: 4 });
     }
     if (cl.t > cl.dur) Game.clouds.splice(i, 1);
   }
@@ -711,7 +828,7 @@ function updateWeaponEntities(dt) {
         if (dist2(b.tx, b.ty, e.x, e.y) < b.splash * b.splash) {
           const a = Math.atan2(e.y - b.ty, e.x - b.tx);
           damageEnemy(e, b.dmg, Math.cos(a) * 90, Math.sin(a) * 90);
-          e.stun = Math.max(e.stun, 0.3);
+          e.stun = Math.max(e.stun, 0.3 + (b.stun || 0));
         }
       }
       Sfx.play('hit');
@@ -734,11 +851,11 @@ function updateWeaponEntities(dt) {
     }
   }
 
-  // oyuncu mermileri: zımba telleri + güdümlü mailler
+  // oyuncu mermileri: deliciler (zımba/fatura/kemer) + güdümlüler (mail/soru)
   for (let i = Game.projs.length - 1; i >= 0; i--) {
     const pr = Game.projs[i];
     pr.t += dt;
-    if (pr.type === 'mail') {
+    if (pr.homing) {
       let tgt = pr.target;
       if (!tgt || tgt.hp <= 0) {
         tgt = null; let bd = 1e9;
@@ -756,12 +873,25 @@ function updateWeaponEntities(dt) {
         pr.vy = lerp(pr.vy, Math.sin(a) * pr.spd, k);
       }
     }
+    // bumerang (kemer): süre dolunca oyuncuya geri döner, dönüşte yeniden vurur
+    if (pr.boom) {
+      if (!pr.boom.back && pr.t >= pr.boom.out) {
+        pr.boom.back = true;
+        pr.hit = new Set();   // dönüş yolunda aynı hedefler tekrar vurulur
+      }
+      if (pr.boom.back) {
+        const a = Math.atan2(p.y - 8 - pr.y, p.x - pr.x);
+        const spd = Math.sqrt(pr.vx * pr.vx + pr.vy * pr.vy) || 100;
+        pr.vx = Math.cos(a) * spd; pr.vy = Math.sin(a) * spd;
+        if (dist2(pr.x, pr.y, p.x, p.y - 8) < 12 * 12) { Game.projs.splice(i, 1); continue; }
+      }
+    }
     pr.x += pr.vx * dt; pr.y += pr.vy * dt;
-    // uçuş izi: zımba kıvılcım, mail beyaz duman bırakır
-    if (Math.random() < (pr.type === 'mail' ? 0.35 : 0.2)) {
+    // uçuş izi
+    if (Math.random() < (pr.homing ? 0.35 : 0.2)) {
       addPart({ x: pr.x, y: pr.y, vx: rand(-5, 5), vy: rand(-5, 5), dur: 0.25,
-        type: pr.type === 'mail' ? 'puff' : 'spark',
-        col: pr.type === 'mail' ? COL.white : COL.greyLight, size: 1 });
+        type: pr.homing ? 'puff' : 'spark',
+        col: pr.homing ? COL.white : (pr.type === 'kemer' ? COL.gold : COL.greyLight), size: 1 });
     }
     if (pr.t > 3) { Game.projs.splice(i, 1); continue; }
     let dead = false;
@@ -770,7 +900,7 @@ function updateWeaponEntities(dt) {
       const r = 5 + 5 * e.type.scale;
       if (dist2(pr.x, pr.y, e.x, e.y - 6) < r * r) {
         damageEnemy(e, pr.dmg, pr.vx * 0.25, pr.vy * 0.25);
-        if (pr.type === 'staple') {
+        if (pr.hit) {
           pr.hit.add(e.id);
           pr.pierce--;
           if (pr.pierce < 0) dead = true;
@@ -997,7 +1127,10 @@ function updateEnemies(dt) {
       e.fuseT -= dt;
       if (e.fuseT <= 0) { explodeBomber(e); continue; }
     } else {
-      const dx = p.x - e.x, dy = p.y - e.y;
+      // hedef: normalde oyuncu; sahte hedef (decoy) varsa oraya koşarlar
+      let tgtX = p.x, tgtY = p.y;
+      if (Game.decoy && !e.type.boss) { tgtX = Game.decoy.x; tgtY = Game.decoy.y; }
+      const dx = tgtX - e.x, dy = tgtY - e.y;
       const d = Math.sqrt(dx * dx + dy * dy) || 1;
 
       if (e.dashT > 0) {
@@ -1123,6 +1256,7 @@ function updateEnemies(dt) {
         if (e.hasteT > 0) spd *= 1.45;
         if (e.enraged) spd *= 1.15;                              // boss öfkesi
         if (e.type.patron && e.hp < e.maxHp * 0.3) spd *= 1.5;   // patron çılgın fazı
+        if (Game.slowT > 0) spd *= Game.slowK;                   // ağır çekim yeteneği
         e.x += mx * spd * dt;
         e.y += my * spd * dt;
         e.flip = p.x < e.x;
@@ -1529,16 +1663,16 @@ function drawPlayField(ctx) {
     }
   }
 
-  // buhar bulutları (zeminde)
+  // buhar bulutları (zeminde) — renk silaha göre (puf gri, gaz yeşil, lastik turuncu)
   for (const cl of Game.clouds) {
     const [sx, sy] = W2S(cl.x, cl.y);
     const pulse = 1 + Math.sin(cl.t * 5) * 0.06;
     ctx.save();
     ctx.globalAlpha = 0.3 * Math.min(1, (cl.dur - cl.t) * 2);
-    ctx.fillStyle = COL.grey;
+    ctx.fillStyle = cl.col || COL.grey;
     ctx.beginPath(); ctx.ellipse(sx, sy, cl.r * pulse, cl.r * 0.65 * pulse, 0, 0, TAU); ctx.fill();
     ctx.globalAlpha *= 0.6;
-    ctx.fillStyle = COL.greyLight;
+    ctx.fillStyle = cl.col ? COL.white : COL.greyLight;
     ctx.beginPath(); ctx.ellipse(sx, sy - 2, cl.r * 0.6, cl.r * 0.4, 0, 0, TAU); ctx.fill();
     ctx.restore();
   }
@@ -1574,12 +1708,12 @@ function drawPlayField(ctx) {
     ctx.restore();
   }
 
-  // geğirti konisi
+  // koni vuruşları (geğirti/salto)
   for (const cn of Game.cones) {
     const [sx, sy] = W2S(cn.x, cn.y);
     ctx.save();
     ctx.globalAlpha = 0.35 * (1 - cn.t / 0.25);
-    ctx.fillStyle = COL.green;
+    ctx.fillStyle = cn.col || COL.green;
     ctx.beginPath();
     ctx.moveTo(sx, sy);
     ctx.arc(sx, sy, cn.range, cn.ang - cn.arc / 2, cn.ang + cn.arc / 2);
@@ -1739,7 +1873,8 @@ function drawPlayField(ctx) {
   for (const c of Game.cars) {
     const [sx, sy] = W2S(c.x, c.y);
     drawShadow(ctx, sx, sy + 2, 15, 4);
-    ctx.drawImage(c.dir > 0 ? SPR.car.n : SPR.car.f, sx - 16, sy - 15);
+    const carSpr = c.vis === 'fork' ? SPR.fork : SPR.car;
+    ctx.drawImage(c.dir > 0 ? carSpr.n : carSpr.f, sx - 16, sy - 15);
   }
 
   // düşman mermileri: koli / dönen yıldız / banknot

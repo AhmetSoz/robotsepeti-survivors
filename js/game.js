@@ -22,6 +22,7 @@ const Game = {
   cars: [], shocks: [], cones: [], pickups: [], parts: [], floats: [],
   projs: [], corpses: [], decals: [],
   achQueue: [], achToast: null,
+  slowT: 0, slowK: 1, decoy: null,
   hazards: [], eRings: [], afterimgs: [], beams: [], ambients: [],
   bossIntro: null, curZone: 'depo', roombaT: 6, sparkT: 12,
   ringT: 20, bossChestT: 0,
@@ -61,6 +62,7 @@ const Game = {
     this.lastHurtT = 0; this.lullT = 0; this.crateT = 6; this.tickN = 0; this.banked = false;
     this.overtime = false; this.nextBossT = WIN_TIME + 90; this.bossCycleIdx = 0;
     this.achQueue = []; this.achToast = null;
+    this.slowT = 0; this.slowK = 1; this.decoy = null;
     Missions.reset();
     Achievements.startRun();
     this.eliteT = charId === 'berker' ? 48 : 60;
@@ -121,6 +123,31 @@ const Game = {
     this.director(dt);
     Missions.update(dt);
     Achievements.update();
+
+    // ağır çekim yeteneği sayacı
+    if (this.slowT > 0) this.slowT -= dt;
+
+    // sahte hedef (decoy): süre bitince patlar
+    if (this.decoy) {
+      const d = this.decoy;
+      d.t += dt;
+      if (d.t >= d.dur) {
+        this.shocks.push({ x: d.x, y: d.y - 4, r: d.r, t: 0, col: COL.orange });
+        this.shake = Math.max(this.shake, 4);
+        for (const e of this.enemies) {
+          if (dist2(d.x, d.y, e.x, e.y) < d.r * d.r) {
+            const a = Math.atan2(e.y - d.y, e.x - d.x);
+            damageEnemy(e, d.dmg, Math.cos(a) * 220, Math.sin(a) * 220);
+          }
+        }
+        for (let i = 0; i < 18; i++) {
+          addPart({ x: d.x, y: d.y - 6, vx: rand(-100, 100), vy: rand(-120, 10), dur: 0.5,
+            type: 'px', col: pick([COL.orange, COL.yellow, COL.white]), size: 2 });
+        }
+        Sfx.play('bomb');
+        this.decoy = null;
+      }
+    }
 
     // başarım toast'ı: kuyruktan sırayla, 3'er saniye altın bildirim
     if (this.achToast) {
