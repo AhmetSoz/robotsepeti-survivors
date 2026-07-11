@@ -342,19 +342,41 @@ const UI = {
     }
   },
 
-  // ── ALBÜM: başarımlar + istatistikler ──
+  // ── ALBÜM: başarımlar + günlükler (hikâye) ──
   updateAlbum() {
     if (Input.back() || this.backHit()) { Game.state = 'title'; Game.menuIdx = 0; Sfx.play('click'); return; }
-    this.navVertical(ACH_DEFS.length);
-    // dokunma/tekerlek yerine: tıklanan satır seçilir
-    for (let r = 0; r < 8; r++) {
-      if (Input.mouseIn(30, 62 + r * 22, 420, 20) && Input.mouse.clicked) {
-        const first = clamp(Game.menuIdx - 3, 0, Math.max(0, ACH_DEFS.length - 8));
-        Game.menuIdx = clamp(first + r, 0, ACH_DEFS.length - 1);
+    // sekme değiştir: A/D ya da sekme başlığına dokun
+    if (Input.pressed['ArrowLeft'] || Input.pressed['KeyA'] ||
+        Input.pressed['ArrowRight'] || Input.pressed['KeyD']) {
+      this.albumTab = 1 - this.albumTab; Game.menuIdx = 0; Sfx.play('click'); return;
+    }
+    for (let tb = 0; tb < 2; tb++) {
+      if (Input.mouse.clicked && Input.mouseIn(120 + tb * 125, 24, 115, 18) && this.albumTab !== tb) {
+        this.albumTab = tb; Game.menuIdx = 0; Sfx.play('click'); return;
+      }
+    }
+    const len = this.albumTab === 0 ? ACH_DEFS.length : STORY_PAGES.length;
+    this.navVertical(len);
+    // dokunma: tıklanan satır seçilir (sekmeye göre satır düzeni farklı)
+    if (this.albumTab === 0) {
+      for (let r = 0; r < 8; r++) {
+        if (Input.mouseIn(30, 62 + r * 22, 420, 20) && Input.mouse.clicked) {
+          const first = clamp(Game.menuIdx - 3, 0, Math.max(0, len - 8));
+          Game.menuIdx = clamp(first + r, 0, len - 1);
+        }
+      }
+    } else {
+      for (let r = 0; r < 6; r++) {
+        if (Input.mouseIn(30, 46 + r * 20, 420, 18) && Input.mouse.clicked) {
+          const first = clamp(Game.menuIdx - 2, 0, Math.max(0, len - 6));
+          Game.menuIdx = clamp(first + r, 0, len - 1);
+        }
       }
     }
     if (Input.confirm()) { Game.state = 'title'; Game.menuIdx = 0; }
   },
+
+  albumTab: 0,   // 0: başarımlar, 1: günlükler (hikâye)
 
   drawAlbum(ctx) {
     World.drawFloor(ctx, 777, 333, Game.uiT);
@@ -362,14 +384,28 @@ const UI = {
     this.backBtn(ctx);
     const doneN = Achievements.countDone();
     drawText(ctx, 'ALBÜM', 240, 8, COL.gold, { align: 'center', scale: 2, shadow: COL.outline });
-    drawText(ctx, doneN + '/' + ACH_DEFS.length + ' BAŞARIM', 240, 26, COL.greyLight, { align: 'center' });
+
+    // sekmeler: BAŞARIMLAR / GÜNLÜKLER
+    const tabs = ['BAŞARIM (' + doneN + '/' + ACH_DEFS.length + ')',
+                  'GÜNLÜKLER (' + Story.countFound() + '/' + STORY_PAGES.length + ')'];
+    for (let tb = 0; tb < 2; tb++) {
+      const on = this.albumTab === tb;
+      const x = 120 + tb * 125;
+      ctx.fillStyle = on ? 'rgba(254,174,52,0.15)' : 'rgba(38,43,68,0.8)';
+      ctx.fillRect(x, 26, 115, 14);
+      ctx.strokeStyle = on ? COL.gold : COL.navy;
+      ctx.strokeRect(x + 0.5, 26.5, 114, 13);
+      drawText(ctx, tabs[tb], x + 57, 30, on ? COL.gold : COL.greyDark, { align: 'center' });
+    }
+
+    if (this.albumTab === 1) { this.drawDiaries(ctx); return; }
 
     // istatistik şeridi
     const st = Achievements.stats;
-    drawText(ctx, 'DEVRİLEN: ' + (st.kills || 0), 36, 40, COL.grey);
-    drawText(ctx, 'KOŞU: ' + (st.runs || 0), 176, 40, COL.grey);
-    drawText(ctx, 'SÜRE: ' + fmtTime(st.time || 0), 268, 40, COL.grey);
-    drawText(ctx, 'BOSS: ' + (st.bossTotal || 0), 390, 40, COL.grey);
+    drawText(ctx, 'DEVRİLEN: ' + (st.kills || 0), 36, 46, COL.grey);
+    drawText(ctx, 'KOŞU: ' + (st.runs || 0), 176, 46, COL.grey);
+    drawText(ctx, 'SÜRE: ' + fmtTime(st.time || 0), 268, 46, COL.grey);
+    drawText(ctx, 'BOSS: ' + (st.bossTotal || 0), 390, 46, COL.grey);
 
     // kaydırmalı başarım listesi (8 satırlık pencere)
     const first = clamp(Game.menuIdx - 3, 0, Math.max(0, ACH_DEFS.length - 8));
@@ -409,7 +445,48 @@ const UI = {
       ctx.fillStyle = COL.navyDark; ctx.fillRect(456, 62, 3, 174);
       ctx.fillStyle = COL.grey; ctx.fillRect(456, 62 + Math.round(k * 160), 3, 14);
     }
-    drawText(ctx, 'W/S: GEZİN · ESC: GERİ', 240, 250, COL.greyLight, { align: 'center' });
+    drawText(ctx, 'W/S: GEZİN · A/D: SEKME · ESC: GERİ', 240, 250, COL.greyLight, { align: 'center' });
+  },
+
+  // GÜNLÜKLER sekmesi: hikâye sayfaları (kayıp kasetlerle açılır)
+  drawDiaries(ctx) {
+    const n = STORY_PAGES.length;
+    const first = clamp(Game.menuIdx - 2, 0, Math.max(0, n - 6));
+    for (let r = 0; r < 6 && first + r < n; r++) {
+      const pg = STORY_PAGES[first + r];
+      const found = !!Story.found[pg.id];
+      const sel = Game.menuIdx === first + r;
+      const y = 46 + r * 20;
+      this.panel(ctx, 30, y, 420, 18, sel ? COL.yellow : (found ? COL.teal : COL.navy));
+      if (found) {
+        ctx.drawImage(SPR.kaset, 38, y + 7);
+        drawText(ctx, pg.title, 52, y + 5, sel ? COL.yellow : COL.teal);
+      } else {
+        drawText(ctx, '??? KAYIP SAYFA', 52, y + 5, COL.greyDark);
+        drawText(ctx, 'KASET BUL (KASA/BOSS)', 444, y + 5, COL.navy, { align: 'right' });
+      }
+    }
+    // kaydırma çubuğu
+    if (n > 6) {
+      const k = Game.menuIdx / (n - 1);
+      ctx.fillStyle = COL.navyDark; ctx.fillRect(456, 46, 3, 118);
+      ctx.fillStyle = COL.grey; ctx.fillRect(456, 46 + Math.round(k * 104), 3, 14);
+    }
+    // seçili sayfanın metni (bulunmuşsa)
+    const cur = STORY_PAGES[clamp(Game.menuIdx, 0, n - 1)];
+    this.panel(ctx, 30, 170, 420, 66, Story.found[cur.id] ? COL.teal : COL.navy);
+    if (Story.found[cur.id]) {
+      drawText(ctx, cur.title, 38, 175, COL.teal);
+      let ty = 187;
+      for (const ln of wrapText(cur.txt, 66).slice(0, 5)) {
+        drawText(ctx, ln, 38, ty, COL.greyLight);
+        ty += 9;
+      }
+    } else {
+      drawText(ctx, 'BU SAYFA HENÜZ BULUNMADI', 240, 195, COL.greyDark, { align: 'center' });
+      drawText(ctx, 'KASALARI KIR, BOSSLARI DEVİR: KAYIP KASETLERİ TOPLA', 240, 208, COL.navy, { align: 'center' });
+    }
+    drawText(ctx, 'W/S: GEZİN · A/D: SEKME · ESC: GERİ', 240, 250, COL.greyLight, { align: 'center' });
   },
 
   // ── KARAKTER SEÇİMİ ──
@@ -822,6 +899,50 @@ const UI = {
       }
     }
 
+    // ── HİKÂYE görselleri ──
+    // karakter konuşma balonu (oyuncunun üstünde)
+    if (Game.speech) {
+      const spt = Game.speech;
+      const psx = Math.round(p.x - Game.camRX + 240);
+      const psy = Math.round(p.y - Game.camRY + 135);
+      const a = clamp(spt.t < 0.2 ? spt.t / 0.2 : (2.8 - spt.t) / 0.4, 0, 1);
+      const tw = Math.min(textW(spt.txt), 200);
+      const lines2 = wrapText(spt.txt, 34);
+      const bh = 8 + lines2.length * 9;
+      const bx2 = clamp(psx - tw / 2 - 6, 4, 476 - tw - 12);
+      const by2 = clamp(psy - 46 - bh, 8, 270);
+      ctx.save();
+      ctx.globalAlpha = a;
+      ctx.fillStyle = 'rgba(244,244,248,0.92)';
+      ctx.fillRect(bx2, by2, tw + 12, bh);
+      ctx.strokeStyle = COL.outline; ctx.lineWidth = 1;
+      ctx.strokeRect(bx2 + 0.5, by2 + 0.5, tw + 11, bh - 1);
+      // balon kuyruğu
+      ctx.fillStyle = 'rgba(244,244,248,0.92)';
+      ctx.beginPath();
+      ctx.moveTo(psx - 3, by2 + bh); ctx.lineTo(psx + 3, by2 + bh); ctx.lineTo(psx, by2 + bh + 5);
+      ctx.closePath(); ctx.fill();
+      let sy2 = by2 + 4;
+      for (const ln of lines2) {
+        drawText(ctx, ln, bx2 + 6, sy2, COL.outline);
+        sy2 += 9;
+      }
+      ctx.restore();
+    }
+    // depo hoparlör anonsu: üstte ince şerit
+    if (Game.anons && !Game.bossIntro) {
+      const an = Game.anons;
+      const a = clamp(an.t < 0.3 ? an.t / 0.3 : (5 - an.t) / 0.6, 0, 1);
+      ctx.save();
+      ctx.globalAlpha = a * 0.85;
+      ctx.fillStyle = 'rgba(24,20,37,0.75)';
+      ctx.fillRect(0, 30, 480, 11);
+      ctx.fillStyle = COL.greyDark;
+      ctx.fillRect(0, 30, 480, 1); ctx.fillRect(0, 40, 480, 1);
+      drawText(ctx, an.txt.slice(0, 72), 240, 32, COL.greyLight, { align: 'center' });
+      ctx.restore();
+    }
+
     // duyuru bandı (koyu şerit üstünde; başarım toast'ı varken alta kayar)
     if (Game.banner) {
       const by = Game.achToast ? 74 : 56;
@@ -1088,6 +1209,9 @@ const UI = {
       drawText(ctx, 'MESAİ FELAKETİ!', 240, 34, COL.red, { align: 'center', scale: 3, shadow: COL.outline });
       drawText(ctx, 'MÜŞTERİLER ' + Game.player.def.name + "'İ YEDİ BİTİRDİ...", 240, 62, COL.greyLight, { align: 'center' });
     }
+    // karakterin son sözü
+    const lw = Story.deathLine(Game.player.charId);
+    if (lw) drawText(ctx, '"' + lw + '"', 240, 71, COL.greyDark, { align: 'center' });
 
     this.panel(ctx, 130, 78, 220, 104, legend ? COL.gold : COL.red);
     const rows = [

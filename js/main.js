@@ -10,6 +10,7 @@
   Input.init(canvas);
   Meta.load();
   Achievements.load();
+  Story.load();
 
   // PWA: service worker (yalnızca http/https — yerel dosyada çalışmaz)
   if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {

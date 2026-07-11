@@ -1041,6 +1041,14 @@ function buildAllSprites() {
     varil: { n: varil, w: whiteOf(varil) }
   };
 
+  // kayıp günlük kaseti (hikâye sayfası)
+  SPR.kaset = buildGrid([
+    'oooooooo',
+    'oWTTTTWo',
+    'oWoTToWo',
+    'oooooooo'
+  ], { o: COL.outline, W: COL.white, T: COL.teal });
+
   // güçlendirmeler
   SPR.pkMagnet = buildGrid(PK_MAGNET_ROWS, { R: COL.red, W: COL.white });
   SPR.pkBomb = buildGrid(PK_BOMB_ROWS, { o: COL.navyDark, g: COL.grey, Y: COL.yellow });

@@ -704,6 +704,7 @@ const ENEMY_TYPES = {
   },
   toptanci: {
     name: 'TOPTANCI',
+    line: "Hepsini toptan alıyorum... SİZİ DE!",
     hp: 950, dmg: 24, speed: 15, scale: 2.4, xp: 40, score: 1500,
     shirt: COL.purpleDark, shade: COL.hairDark, skin: COL.skinAlt,
     boss: true, big: true, sprScale: 1.6,
@@ -713,6 +714,7 @@ const ENEMY_TYPES = {
   },
   karaborsaci: {
     name: 'KARABORSACI',
+    line: "Fiyatlar benim, kurallar benim.",
     hp: 1500, dmg: 20, speed: 13, scale: 2.1, xp: 50, score: 2500,
     shirt: COL.hairDark, shade: COL.outline, skin: COL.skinAlt,
     boss: true, big: true, sprScale: 1.55,
@@ -721,6 +723,7 @@ const ENEMY_TYPES = {
   },
   mudur: {
     name: 'BÖLGE MÜDÜRÜ',
+    line: "KPI larınız tam bir felaket.",
     hp: 3400, dmg: 26, speed: 16, scale: 2.4, xp: 90, score: 5000,
     shirt: COL.blueDark, shade: COL.navyDark, skin: COL.skin,
     boss: true,
@@ -740,6 +743,7 @@ const ENEMY_TYPES = {
   },
   rakip: {
     name: 'RAKİP CEO',
+    line: "Sitenizi 49 liraya satın alıyorum.",
     hp: 4200, dmg: 30, speed: 15, scale: 2.5, xp: 110, score: 6000,
     shirt: COL.greenDeep, shade: COL.outline, skin: COL.skinAlt,
     boss: true,
@@ -759,6 +763,7 @@ const ENEMY_TYPES = {
   },
   patron: {
     name: 'BÜYÜK PATRON',
+    line: "Mesai bitti diyen KİM?",
     hp: 2600, dmg: 28, speed: 14, scale: 2.7, xp: 80, score: 4000,
     shirt: COL.outline, shade: COL.hairDark, skin: COL.skin,
     boss: true, patron: true, big: true, sprScale: 1.85,
@@ -772,6 +777,7 @@ const ENEMY_TYPES = {
   // counter alanı buildProfile() çıktısıyla eşleşir; dk12+ döngüde gelirler.
   pazarlamaci: {
     name: 'PAZARLAMA MÜDÜRÜ',
+    line: "Yaklaşma! Broşür fırlatırım!",
     hp: 3800, dmg: 24, speed: 20, scale: 2.3, xp: 100, score: 5500,
     shirt: COL.pink, shade: COL.purpleDark, skin: COL.skin,
     boss: true, counter: 'melee',
@@ -793,6 +799,7 @@ const ENEMY_TYPES = {
   },
   lojistik: {
     name: 'LOJİSTİK ŞEFİ',
+    line: "Sevkiyat sana geliyor, sen bana değil.",
     hp: 4200, dmg: 26, speed: 18, scale: 2.4, xp: 110, score: 6000,
     shirt: COL.orange, shade: COL.orangeDark, skin: COL.skinAlt,
     boss: true, counter: 'ranged',
@@ -815,6 +822,7 @@ const ENEMY_TYPES = {
   },
   takipci: {
     name: 'TAKİP UZMANI',
+    line: "Kaçamazsın. Ben kargodan hızlıyım.",
     hp: 4600, dmg: 30, speed: 26, scale: 2.2, xp: 120, score: 6500,
     shirt: COL.hairDark, shade: COL.outline, skin: COL.skin,
     boss: true, counter: 'mobile',

@@ -64,6 +64,10 @@ const Game = {
     this.achQueue = []; this.achToast = null;
     this.slowT = 0; this.slowK = 1; this.decoy = null;
     this.reportT = 300; this.repKills = 0; this.repCoins = 0; this.report = null;
+    // hikâye durumu: konuşma balonu, anons, kilometre taşları
+    this.speech = null; this.introSayT = 1.2; this.sayMilestone = 300;
+    this.lowSayT = -99; this.anons = null; this.anonsT = 50;
+    Story.anonsIdx = -1;
     Missions.reset();
     Achievements.startRun();
     this.eliteT = charId === 'berker' ? 48 : 60;
@@ -157,6 +161,36 @@ const Game = {
     if (this.report) {
       this.report.t += dt;
       if (this.report.t > 4) this.report = null;
+    }
+
+    // ── HİKÂYE: karakter konuşmaları + depo anonsları ──
+    if (this.speech) {
+      this.speech.t += dt;
+      if (this.speech.t > 2.8) this.speech = null;
+    }
+    if (this.introSayT > 0) {
+      this.introSayT -= dt;
+      if (this.introSayT <= 0) Story.sayFrom('start');
+    }
+    if (this.time >= this.sayMilestone) {
+      this.sayMilestone += 300;
+      if (!this.speech) Story.sayFrom('mid');
+    }
+    const pl = this.player;
+    if (pl.hp > 0 && pl.hp < pl.maxHp * 0.25 && this.time - this.lowSayT > 30) {
+      this.lowSayT = this.time;
+      Story.sayFrom('low');
+    }
+    // hoparlör anonsu: 75-100 sn'de bir mizah/hikâye kırıntısı
+    this.anonsT -= dt;
+    if (this.anonsT <= 0) {
+      this.anonsT = rand(75, 100);
+      this.anons = { txt: 'ANONS: ' + Story.nextAnnouncement(), t: 0 };
+      Sfx.play('click');
+    }
+    if (this.anons) {
+      this.anons.t += dt;
+      if (this.anons.t > 5) this.anons = null;
     }
 
     // sahte hedef (decoy): süre bitince patlar
@@ -374,7 +408,7 @@ const Game = {
       const boss = this.spawnAt(b.id);
       this.bossAlive = true;
       this.banner = { txt: b.banner, t: 0 };
-      this.bossIntro = { t: 0, name: ENEMY_TYPES[b.id].name };
+      this.bossIntro = { t: 0, name: ENEMY_TYPES[b.id].name, line: ENEMY_TYPES[b.id].line };
       this.shocks.push({ x: boss.x, y: boss.y - 8, r: 70, t: 0, col: COL.purple });
       Sfx.play('boss');
       this.shake = Math.max(this.shake, 4);
@@ -403,7 +437,7 @@ const Game = {
       this.banner = nemesis
         ? { txt: 'DEPO SENİ İZLİYOR: ' + title + ' GELDİ!', t: 0 }
         : { txt: title + ' GERİ DÖNDÜ! DAHA DA ÖFKELİ!', t: 0 };
-      this.bossIntro = { t: 0, name: title };
+      this.bossIntro = { t: 0, name: title, line: ENEMY_TYPES[id].line };
       this.shocks.push({ x: boss.x, y: boss.y - 8, r: 70, t: 0, col: nemesis ? COL.red : COL.purple });
       Sfx.play('boss');
       this.shake = Math.max(this.shake, 4);
@@ -872,6 +906,11 @@ const Game = {
           { align: 'center', scale: 3, shadow: COL.outline, alpha: Math.min(1, k) });
         drawText(ctx, 'GELDİ!', 240, 146, COL.yellow,
           { align: 'center', scale: 1, shadow: COL.outline, alpha: (0.6 + Math.sin(t * 10) * 0.4) * k });
+        // boss repliği: kişilik tek satırda
+        if (this.bossIntro.line && t > 0.7) {
+          drawText(ctx, '"' + this.bossIntro.line + '"', 240, 160, COL.greyLight,
+            { align: 'center', alpha: Math.min(1, (t - 0.7) / 0.3) * k });
+        }
       }
     }
 

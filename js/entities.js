@@ -1080,6 +1080,10 @@ function killEnemy(e) {
     Sfx.play('break');
     Missions.event('crates');
     Achievements.event('crates');
+    // nadir: kayıp günlük kaseti (hikâye sayfası)
+    if (Math.random() < 0.04 && !Story.allFound()) {
+      addPickup('kaset', e.x, e.y);
+    }
     const roll = Math.random();
     if (roll < 0.28) addPickup('coin', e.x, e.y);
     else if (roll < 0.5) { for (let i = 0; i < 3; i++) addPickup('chip', e.x + rand(-8, 8), e.y + rand(-6, 6), 2); }
@@ -1159,6 +1163,10 @@ function killEnemy(e) {
       const kan = e.lap * 5;
       Game.coins += kan;
       addFloat(e.x, e.y - 20, 'KAN PARASI +' + kan, COL.red, true);
+    }
+    // bosslar günlük kaseti düşürür (hikâye ilerlemesi garantili kaynak)
+    if (!Story.allFound()) {
+      addPickup('kaset', e.x + rand(-12, 12), e.y + 12);
     }
     Game.freeze = 0.25;
     Game.shake = Math.max(Game.shake, 6);
@@ -1674,6 +1682,13 @@ function collectPickup(pk) {
       Sfx.play('turbo');
       break;
     }
+    case 'kaset': {
+      // kayıp günlük kaseti: sıradaki hikâye sayfası açılır
+      Story.unlockNextPage();
+      addFloat(pk.x, pk.y - 8, 'KAYIP KASET!', COL.teal, true);
+      Sfx.play('chest');
+      break;
+    }
     case 'coin':
       Game.coins++;
       Game.score += Math.round(30 * p.greed);
@@ -1925,10 +1940,10 @@ function drawPlayField(ctx) {
       ctx.drawImage(SPR.coin, sx - 3, sy - 5 + bob);
     } else if (pk.type === 'heart') {
       ctx.drawImage(SPR.heart, sx - 4, sy - 5 + bob);
-    } else if (pk.type === 'magnet' || pk.type === 'bomb' || pk.type === 'shield' || pk.type === 'turbo') {
-      // güçlendirmeler: parlayan halka + ikon
+    } else if (pk.type === 'magnet' || pk.type === 'bomb' || pk.type === 'shield' || pk.type === 'turbo' || pk.type === 'kaset') {
+      // güçlendirmeler + kaset: parlayan halka + ikon
       const spr = pk.type === 'magnet' ? SPR.pkMagnet : pk.type === 'bomb' ? SPR.pkBomb
-                : pk.type === 'shield' ? SPR.pkShield : SPR.pkTurbo;
+                : pk.type === 'shield' ? SPR.pkShield : pk.type === 'kaset' ? SPR.kaset : SPR.pkTurbo;
       ctx.save();
       ctx.globalAlpha = 0.25 + Math.sin(pk.t * 6) * 0.15;
       ctx.strokeStyle = COL.white;
