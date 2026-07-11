@@ -108,8 +108,11 @@ module.exports = async (req, res) => {
         ['ZRANGE', key, '0', String(TOP - 1), 'REV', 'WITHSCORES'],
         ['ZCARD', key]
       ];
-      // günlük tablolar 7 gün sonra kendiliğinden silinir
-      if (useDay) cmds.push(['EXPIRE', key, '604800']);
+      if (useDay) {
+        cmds.push(['ZADD', KEY, String(entry.score), member]);
+        cmds.push(['ZCARD', KEY]);
+        cmds.push(['EXPIRE', key, '604800']);
+      }
       const results = await pipe(cmds);
       const rank = results[1];                 // 0 tabanlı sıra
       const list = parseList(results[2]);
@@ -118,6 +121,14 @@ module.exports = async (req, res) => {
       // tablo KEEP'i aşarsa en düşük skorları buda (güvenli pozitif aralık)
       if (card > KEEP) {
         await pipe([['ZREMRANGEBYRANK', key, '0', String(card - KEEP - 1)]]);
+      }
+
+      // If in daily mode, also prune the global leaderboard if it exceeds KEEP
+      if (useDay) {
+        const globalCard = Number(results[5]) || 0;
+        if (globalCard > KEEP) {
+          await pipe([['ZREMRANGEBYRANK', KEY, '0', String(globalCard - KEEP - 1)]]);
+        }
       }
 
       return res.status(200).json({ ok: true, list, rank: rank == null ? -1 : Number(rank) });
