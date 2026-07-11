@@ -64,6 +64,12 @@
     if (CHARACTERS[c]) {
       // günün vardiyası testi: ?daily=1 (modlar + tohumlu akış)
       if (params.get('daily')) Game.dailyPending = true;
+      // vardiya zorluğu testi: ?shift=3 (kilidi de açar)
+      if (params.get('shift')) {
+        const sn = parseInt(params.get('shift'), 10) || 1;
+        Achievements.stats.shiftMax = Math.max(Achievements.stats.shiftMax || 1, sn);
+        Meta.data.shift = sn;
+      }
       // loadout testi: ?lw=kemer&ls=sampiyonk (kilidi otomatik açar)
       if (params.get('lw') || params.get('ls')) {
         const lw = params.get('lw'), ls = params.get('ls');
@@ -123,17 +129,53 @@
       }
       // sim: N saniyelik oyunu önceden işlet (deterministik ekran görüntüsü)
       const sim = parseFloat(params.get('sim') || '0');
+      // denge telemetrisi: &debug=1 → dakika anlarında durum + ölüm anı title'a JSON yazılır
+      const dbg = params.get('debug') ? { snaps: [], death: null } : null;
+      const dbgMarks = [180, 360, 540, 720, 900, 1200];
+      let dbgIdx = 0;
       try {
         for (let i = 0; i < sim * 60; i++) {
           if (Game.state === 'levelup' && Game.levelOptions.length) Game.applyOption(Game.levelOptions[0]);
           if (Game.state === 'chest') { Game.chestAnim = null; Game.state = 'play'; }
           if (params.get('autoskill') && Game.state === 'play' && Game.player.skill.cd <= 0) useSkill(Game.player);
+          // automove: bot en yakın tehditlerden kaçar (gerçekçi denge telemetrisi)
+          if (params.get('automove') && Game.state === 'play') {
+            let fx2 = 0, fy2 = 0;
+            for (const en of Game.enemies) {
+              if (en.dead || en.spawnT > 0 || en.type.breakable) continue;
+              const dd = dist2(en.x, en.y, Game.player.x, Game.player.y);
+              if (dd < 120 * 120) {
+                const w2 = 1 / Math.max(dd, 100);
+                fx2 += (Game.player.x - en.x) * w2;
+                fy2 += (Game.player.y - en.y) * w2;
+              }
+            }
+            const fl = Math.sqrt(fx2 * fx2 + fy2 * fy2);
+            if (fl > 0.0001) {
+              Input.joy.id = 99;
+              Input.joy.ax = fx2 / fl;
+              Input.joy.ay = fy2 / fl;
+            } else { Input.joy.id = -1; Input.joy.ax = 0; Input.joy.ay = 0; }
+          }
           Game.update(1 / 60);
+          if (dbg) {
+            if (dbgIdx < dbgMarks.length && Game.time >= dbgMarks[dbgIdx]) {
+              dbg.snaps.push({
+                t: dbgMarks[dbgIdx], hp: Math.round(Game.player.hp), sv: Game.level,
+                w: Game.player.weapons.map(w => w.id + (w.evolved ? '*' : '') + w.lvl).join('/'),
+                kill: Game.kills, para: Game.coins
+              });
+              dbgIdx++;
+            }
+            if (Game.state === 'over' && !dbg.death) dbg.death = Math.round(Game.time);
+          }
+          if (Game.state === 'over' && dbg) break;
         }
       } catch (e) {
         document.title = 'SIM HATA: ' + e.message + ' | ' + (e.stack || '').split('\n')[1];
         throw e;
       }
+      if (dbg) document.title = 'DEBUG ' + JSON.stringify(dbg);
       // ekran görüntüsü testi: yeteneği hemen kullan
       if (params.get('useskill') && Game.state === 'play') {
         Game.player.skill.cd = 0;
