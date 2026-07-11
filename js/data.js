@@ -855,6 +855,20 @@ const BOSS_CYCLE_GAP = 150;
 // build profili → counter boss eşlemesi (nemesis sistemi)
 const COUNTER_BY_PROFILE = { melee: 'pazarlamaci', ranged: 'lojistik', mobile: 'takipci' };
 
+// ─── TAKILAR (trinket): artı/eksili kalıcı parçalar, kasalardan çok nadir ───
+// En fazla 3 taşınır; fx recalcStats'a işlenir (Brotato tarzı ödünleşme).
+const TRINKETS = {
+  mesaikarti: { name: 'MESAİ KARTI',        desc: '+%15 tecrübe, -%8 hız',            icon: 'klavye',   fx: { xp: 0.15, spd: -0.08 } },
+  celikbot:   { name: 'ÇELİK BURUNLU BOT',  desc: '+2 zırh, -%8 hız',                 icon: 'sigorta',  fx: { armor: 2, spd: -0.08 } },
+  enerjikasa: { name: 'ENERJİ KASASI',      desc: '+%10 hız, -%10 hasar',             icon: 'enerji',   fx: { spd: 0.10, might: -0.10 } },
+  termos:     { name: 'PATRONUN TERMOSU',   desc: '+%12 hasar, +%10 alınan hasar',    icon: 'kahve',    fx: { might: 0.12, taken: 0.10 } },
+  kupon:      { name: 'ŞANSLI KUPON',       desc: '+%25 para, -%5 hasar',             icon: 'prim',     fx: { greed: 0.25, might: -0.05 } },
+  eldiven:    { name: 'İŞ ELDİVENİ',        desc: '+%8 kritik, -%15 toplama alanı',   icon: 'robotkol', fx: { crit: 0.08, magnet: -0.15 } },
+  kronometre: { name: 'KRONOMETRE',         desc: 'Silah beklemesi -%8, +%8 alınan hasar', icon: 'klavye', fx: { cdr: 0.08, taken: 0.08 } },
+  devmiknatis:{ name: 'DEV MIKNATIS',       desc: '+%30 toplama alanı, -%5 hız',      icon: 'miknatis', fx: { magnet: 0.30, spd: -0.05 } }
+};
+const TRINKET_ORDER = ['mesaikarti', 'celikbot', 'enerjikasa', 'termos', 'kupon', 'eldiven', 'kronometre', 'devmiknatis'];
+
 // ─── Vardiya zorluğu 1-5 (Brotato danger): V(n) için V(n-1)'i 15dk geç ───
 const SHIFT_DEFS = [
   { n: 1, name: 'VARDİYA 1', desc: 'Standart mesai',                    hp: 1,    dmg: 1,    rate: 1,    reward: 1 },

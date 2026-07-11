@@ -50,6 +50,7 @@ function makePlayer(charId) {
     // aktif yetenek + robot kol
     skill: { id: lo.s, lvl: 1, cd: 4, wasReady: false },
     bonus: { hp: 0, dmg: 0, armor: 0, spd: 0, greed: 0 },   // sonsuz stat kartları
+    trinkets: [],   // takılar (artı/eksili, en çok 3)
     dashS: null, turboT: 0, turboHit: null, magnetBoostT: 0,
     shieldT: 0, turboPickT: 0, afterT: 0, lean: 0, turnT: 0,
     armT: 1, armAnim: null,
@@ -93,6 +94,21 @@ function recalcStats(p) {
   p.armor += b.armor;
   p.spd *= 1 + b.spd * 0.03;
   p.greed += b.greed * 0.08;
+  // takılar (trinket): artı/eksili ödünleşmeler
+  for (const tid of (p.trinkets || [])) {
+    const fx = TRINKETS[tid] && TRINKETS[tid].fx;
+    if (!fx) continue;
+    if (fx.xp) p.xpGain += fx.xp;
+    if (fx.spd) p.spd *= 1 + fx.spd;
+    if (fx.armor) p.armor += fx.armor;
+    if (fx.might) p.might *= 1 + fx.might;
+    if (fx.greed) p.greed += fx.greed;
+    if (fx.crit) p.crit += fx.crit;
+    if (fx.magnet) p.magnetR *= 1 + fx.magnet;
+    if (fx.cdr) p.cdr = Math.min(0.6, p.cdr + fx.cdr);
+    if (fx.taken) p.dmgTakenMul *= 1 + fx.taken;
+  }
+  p.armor = Math.max(0, p.armor);
 }
 
 function weaponStats(p, w) {
@@ -1080,9 +1096,24 @@ function killEnemy(e) {
     Sfx.play('break');
     Missions.event('crates');
     Achievements.event('crates');
+    // SIR: ofisteki altın gizli kasa — para yağmuru + kaset + gizli başarım
+    if (e.gizli) {
+      Achievements.event('gizli');
+      for (let i = 0; i < 8; i++) addPickup('coin', e.x + rand(-18, 18), e.y + rand(-12, 12));
+      if (!Story.allFound()) addPickup('kaset', e.x, e.y);
+      addPickup('magnet', e.x + rand(-10, 10), e.y);
+      Game.flashT = 0.3; Game.flashCol = '254,174,52';
+      addFloat(e.x, e.y - 18, 'GİZLİ KASA!', COL.gold, true);
+      Sfx.play('chest');
+      return;
+    }
     // nadir: kayıp günlük kaseti (hikâye sayfası)
     if (Math.random() < 0.04 && !Story.allFound()) {
       addPickup('kaset', e.x, e.y);
+    }
+    // çok nadir: TAKI (trinket) — artı/eksili kalıcı parça
+    if (Math.random() < 0.025 && Game.player.trinkets.length < 3) {
+      addPickup('trinket', e.x, e.y);
     }
     const roll = Math.random();
     if (roll < 0.28) addPickup('coin', e.x, e.y);
@@ -1682,6 +1713,23 @@ function collectPickup(pk) {
       Sfx.play('turbo');
       break;
     }
+    case 'trinket': {
+      // rastgele sahip olunmayan takı; 3 doluysa paraya döner
+      const have = new Set(p.trinkets);
+      const pool2 = TRINKET_ORDER.filter(t => !have.has(t));
+      if (!pool2.length || p.trinkets.length >= 3) {
+        Game.coins += 5;
+        addFloat(pk.x, pk.y - 8, 'TAKI YOK: +5 PARA', COL.gold);
+      } else {
+        const tid = pick(pool2);
+        p.trinkets.push(tid);
+        recalcStats(p);
+        addFloat(pk.x, pk.y - 10, 'TAKI: ' + TRINKETS[tid].name + '!', COL.gold, true);
+        Game.banner = { txt: 'TAKI BULUNDU: ' + TRINKETS[tid].name + ' (' + TRINKETS[tid].desc + ')', t: 0 };
+      }
+      Sfx.play('chest');
+      break;
+    }
     case 'kaset': {
       // kayıp günlük kaseti: sıradaki hikâye sayfası açılır
       Story.unlockNextPage();
@@ -1940,10 +1988,10 @@ function drawPlayField(ctx) {
       ctx.drawImage(SPR.coin, sx - 3, sy - 5 + bob);
     } else if (pk.type === 'heart') {
       ctx.drawImage(SPR.heart, sx - 4, sy - 5 + bob);
-    } else if (pk.type === 'magnet' || pk.type === 'bomb' || pk.type === 'shield' || pk.type === 'turbo' || pk.type === 'kaset') {
+    } else if (pk.type === 'magnet' || pk.type === 'bomb' || pk.type === 'shield' || pk.type === 'turbo' || pk.type === 'kaset' || pk.type === 'trinket') {
       // güçlendirmeler + kaset: parlayan halka + ikon
       const spr = pk.type === 'magnet' ? SPR.pkMagnet : pk.type === 'bomb' ? SPR.pkBomb
-                : pk.type === 'shield' ? SPR.pkShield : pk.type === 'kaset' ? SPR.kaset : SPR.pkTurbo;
+                : pk.type === 'shield' ? SPR.pkShield : pk.type === 'kaset' ? SPR.kaset : pk.type === 'trinket' ? SPR.trinket : SPR.pkTurbo;
       ctx.save();
       ctx.globalAlpha = 0.25 + Math.sin(pk.t * 6) * 0.15;
       ctx.strokeStyle = COL.white;

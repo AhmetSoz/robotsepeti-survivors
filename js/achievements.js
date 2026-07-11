@@ -55,7 +55,9 @@ const ACH_DEFS = [
   { id: 'skills',  name: 'YETENEK AVCISI',     desc: 'Toplam 100 yetenek kullan',       key: 'skillUse', scope: 'total', target: 100, reward: { coins: 55 } },
   // ── gizli ──
   { id: 'h_combo', name: 'DEPO CANAVARI',      desc: 'Tek koşuda 150 kombo yap',        key: 'combo', scope: 'run', mode: 'max', target: 150, hidden: true, reward: { coins: 200 } },
-  { id: 'h_pasif', name: 'PASİF DİRENİŞ',      desc: 'Hiç yetenek kullanmadan 10 dk dayan', key: 'noSkill10', scope: 'run', mode: 'max', target: 1, hidden: true, reward: { coins: 100 } }
+  { id: 'h_pasif', name: 'PASİF DİRENİŞ',      desc: 'Hiç yetenek kullanmadan 10 dk dayan', key: 'noSkill10', scope: 'run', mode: 'max', target: 1, hidden: true, reward: { coins: 100 } },
+  { id: 'h_roomba', name: 'TEMİZLİK MÜFETTİŞİ', desc: 'Robot süpürgeye 3 kez dokun',     key: 'roomba', scope: 'total', target: 3, hidden: true, reward: { coins: 60 } },
+  { id: 'h_gizli', name: 'OFİS DEDEKTİFİ',     desc: 'Ofisteki gizli kasayı bul ve kır', key: 'gizli', scope: 'total', target: 1, hidden: true, reward: { coins: 80 } }
 ];
 
 const Achievements = {

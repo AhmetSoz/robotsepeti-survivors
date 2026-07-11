@@ -879,6 +879,11 @@ const UI = {
       drawText(ctx, p.items[id], ix + 10, wy + 4, COL.white, { shadow: COL.outline });
       ix += 20;
     }
+    // takılar: altın elmas ikonları
+    for (const tid of p.trinkets) {
+      ctx.drawImage(SPR.trinket, ix, wy);
+      ix += 12;
+    }
 
     // sağ alt: aktif yetenek kutusu (SPACE)
     {
@@ -1076,6 +1081,28 @@ const UI = {
         if (Input.mouse.clicked) { Game.applyOption(Game.levelOptions[i]); return; }
       }
     }
+    // YENİDEN ÇEK (R): üç kart yeniden dağıtılır (koşu başına 2 hak)
+    const rrHit = Input.mouse.clicked && Input.mouseIn(118, 204, 118, 18);
+    if ((Input.pressed['KeyR'] || rrHit) && Game.rerolls > 0) {
+      Game.rerolls--;
+      Game.levelOptions = Game.genOptions();
+      Game.levelIdx = 0;
+      Sfx.play('click');
+      return;
+    }
+    // YASAKLA (B): seçili kart bu koşuda bir daha gelmez (1 hak)
+    const bnHit = Input.mouse.clicked && Input.mouseIn(244, 204, 118, 18);
+    if ((Input.pressed['KeyB'] || bnHit) && Game.banishes > 0) {
+      const o = Game.levelOptions[Game.levelIdx];
+      if (o && o.kind !== 'stat') {   // sonsuz stat kartları yasaklanamaz
+        Game.banishes--;
+        Game.banished[o.kind + ':' + o.id] = 1;
+        Game.levelOptions = Game.genOptions();
+        Game.levelIdx = 0;
+        Sfx.play('hurt');
+      }
+      return;
+    }
     if (Input.confirm()) Game.applyOption(Game.levelOptions[Game.levelIdx]);
   },
 
@@ -1123,7 +1150,13 @@ const UI = {
       }
       drawText(ctx, '' + (i + 1), r.x + 5, r.y + 4, COL.greyDark);
     }
-    drawText(ctx, '1/2/3 VEYA OK + ENTER', 240, 208, COL.greyDark, { align: 'center' });
+    // yeniden çek / yasakla butonları (build derinliği)
+    const rrOk = Game.rerolls > 0, bnOk = Game.banishes > 0;
+    this.panel(ctx, 118, 204, 118, 18, rrOk ? COL.teal : COL.navy);
+    drawText(ctx, 'YENİDEN ÇEK (' + Game.rerolls + ') R', 177, 209, rrOk ? COL.teal : COL.navyDark, { align: 'center' });
+    this.panel(ctx, 244, 204, 118, 18, bnOk ? COL.red : COL.navy);
+    drawText(ctx, 'YASAKLA (' + Game.banishes + ') B', 303, 209, bnOk ? COL.red : COL.navyDark, { align: 'center' });
+    drawText(ctx, '1/2/3 VEYA OK + ENTER', 240, 232, COL.greyDark, { align: 'center' });
   },
 
   // ── KOLİ AÇILIŞI ──

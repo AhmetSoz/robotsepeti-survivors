@@ -101,6 +101,9 @@ const Game = {
     this.speech = null; this.introSayT = 1.2; this.sayMilestone = 300;
     this.lowSayT = -99; this.anons = null; this.anonsT = 50;
     Story.anonsIdx = -1;
+    // build derinliği: yeniden çek/yasakla hakları + sırlar
+    this.rerolls = 2; this.banishes = 1; this.banished = {};
+    this.gizliDone = false; this.roombaCd = 0;
     Missions.reset();
     Achievements.startRun();
     this.eliteT = charId === 'berker' ? 48 : 60;
@@ -285,6 +288,27 @@ const Game = {
       this.curZone = zid;
       if (this.time > 2 && !this.banner) {
         this.banner = { txt: '— ' + ZONE_DEFS[zid].name + ' —', t: 0.8 };
+      }
+      // SIR: ofise ilk girişte bazen altın gizli kasa belirir
+      if (zid === 'ofis' && !this.gizliDone && Math.random() < 0.35) {
+        this.gizliDone = true;
+        const a = rand(TAU);
+        const gk = spawnEnemy('kasa', this.player.x + Math.cos(a) * 90, this.player.y + Math.sin(a) * 90);
+        gk.gizli = true;
+        addFloat(gk.x, gk.y - 14, '???', COL.gold, true);
+      }
+    }
+
+    // SIR: robot süpürgeye dokunma sayacı (gizli başarım)
+    if (this.roombaCd > 0) this.roombaCd -= dt;
+    for (const am of this.ambients) {
+      if (this.roombaCd > 0) break;
+      if (dist2(this.player.x, this.player.y, am.x, am.y) < 13 * 13) {
+        this.roombaCd = 2;
+        Achievements.event('roomba');
+        addFloat(am.x, am.y - 12, 'BİP!', COL.teal);
+        Sfx.play('click');
+        break;
       }
     }
 
@@ -641,6 +665,11 @@ const Game = {
       const sid = pick(others);
       pool.push({ kind: 'skillswap', id: sid, name: 'YETENEK DEĞİŞ: ' + SKILLS[sid].name,
         desc: SKILLS[sid].desc, lvl: p.skill.lvl, weight: 0.5 });
+    }
+    // yasaklananlar havuzdan düşer (YASAKLA hakkı)
+    const banned = this.banished || {};
+    for (let i = pool.length - 1; i >= 0; i--) {
+      if (banned[pool[i].kind + ':' + pool[i].id]) pool.splice(i, 1);
     }
     // ağırlıklı, tekrarsız 3 seçim
     const opts = [];

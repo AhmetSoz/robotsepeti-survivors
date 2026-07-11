@@ -1049,6 +1049,17 @@ function buildAllSprites() {
     'oooooooo'
   ], { o: COL.outline, W: COL.white, T: COL.teal });
 
+  // takı (trinket): altın elmas
+  SPR.trinket = buildGrid([
+    '...GG...',
+    '..GYYG..',
+    '.GYWWYG.',
+    'GYWWWWYG',
+    '.GYWWYG.',
+    '..GYYG..',
+    '...GG...'
+  ], { G: COL.gold, Y: COL.yellow, W: COL.white });
+
   // güçlendirmeler
   SPR.pkMagnet = buildGrid(PK_MAGNET_ROWS, { R: COL.red, W: COL.white });
   SPR.pkBomb = buildGrid(PK_BOMB_ROWS, { o: COL.navyDark, g: COL.grey, Y: COL.yellow });
