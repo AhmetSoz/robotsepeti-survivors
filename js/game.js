@@ -115,6 +115,19 @@ const Game = {
     Sfx.startMusic();
   },
 
+  // SKİLL ATÖLYESİ testi: seçili karakterle başlat, SPACE yeteneğini
+  // oyuncunun ürettiği özel reçeteyle değiştir (anında dene).
+  startForgeTest(charId) {
+    const spec = Forge.data.ability;
+    if (!spec) return;
+    // custom yeteneği runtime'da SKILLS'e kaydet (skillStats cd'yi buradan okur)
+    SKILLS.custom = { kind: 'custom', name: spec.name, icon: 'sk_ahmet',
+      cd: spec.cd, base: {}, perLvl: {} };
+    this.startRun(charId || this.selChar || 'ahmet');
+    this.player.skill = { id: 'custom', lvl: 1, cd: 0, spec, wasReady: true };
+    this.banner = { txt: 'ÖZEL YETENEK: ' + spec.name + ' — SPACE İLE DENE!', t: 0 };
+  },
+
   xpNeeded(l) { return 8 + (l - 1) * 7 + Math.max(0, l - 8) * 6; },
 
   displayScore() {
@@ -151,6 +164,7 @@ const Game = {
       case 'shop': UI.updateShop(); break;
       case 'album': UI.updateAlbum(); break;
       case 'daily': UI.updateDaily(); break;
+      case 'forge': UI.updateForge(); break;
     }
 
     if (this.banner) {
@@ -922,6 +936,7 @@ const Game = {
     if (this.state === 'shop') { UI.drawShop(ctx); return; }
     if (this.state === 'album') { UI.drawAlbum(ctx); return; }
     if (this.state === 'daily') { UI.drawDaily(ctx); return; }
+    if (this.state === 'forge') { UI.drawForge(ctx); return; }
 
     // oyun sahnesi (play, levelup, chest, pause, over)
     this.camRX = this.camX + (this.shake > 0 ? rand(-this.shake, this.shake) : 0) + this.kickX;

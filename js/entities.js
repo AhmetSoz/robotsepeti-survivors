@@ -279,6 +279,8 @@ function useSkill(p) {
   Achievements.run.skillUsedFlag = 1;   // "pasif direniş" gizli başarımı bozulur
 
   switch (def.kind) {
+    // SKİLL ATÖLYESİ: oyuncunun cümlesinden üretilmiş özel yetenek
+    case 'custom': runAbility(p.skill.spec, p); break;
     case 'dash': {
       // minder dayağı: ileri atılış
       let fx = p.facing.x, fy = p.facing.y;
@@ -979,6 +981,7 @@ function updateWeaponEntities(dt) {
       const r = 5 + 5 * e.type.scale;
       if (dist2(pr.x, pr.y, e.x, e.y - 6) < r * r) {
         damageEnemy(e, pr.dmg, pr.vx * 0.25, pr.vy * 0.25);
+        if (pr.forge) forgeApplyPayloads(pr.forge, e);   // atölye mermisi: dondur/yavaşlat taşır
         if (pr.hit) {
           pr.hit.add(e.id);
           pr.pierce--;

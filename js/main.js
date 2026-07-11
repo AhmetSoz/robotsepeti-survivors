@@ -11,6 +11,7 @@
   Meta.load();
   Achievements.load();
   Story.load();
+  Forge.load();
 
   // PWA: service worker (yalnızca http/https — yerel dosyada çalışmaz)
   if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
@@ -77,7 +78,13 @@
         if (ls) Meta.grantUnlock('t_' + ls);
         Meta.setLoadout(c, lw || TECHS[c].weapons[0], ls || TECHS[c].skills[0]);
       }
-      Game.startRun(c);
+      // skill atölyesi testi: ?char=ahmet&forge=<cümle> → özel yetenekle başla
+      if (params.get('forge')) {
+        Forge.data.ability = parseAbility(params.get('forge'));
+        Game.startForgeTest(c);
+      } else {
+        Game.startRun(c);
+      }
       const skip = parseFloat(params.get('t') || '0');
       if (skip > 0) Game.time = skip;
       // demo: sahneyi doldur (görsel test için)
@@ -202,6 +209,10 @@
   }
   if (params.get('screen') === 'album') Game.state = 'album';
   if (params.get('screen') === 'daily') Game.state = 'daily';
+  if (params.get('screen') === 'forge') {
+    Game.state = 'forge';
+    if (params.get('text')) { Forge.input = params.get('text'); Forge.data.ability = parseAbility(Forge.input); }
+  }
   // test: başarım/istatistik doldurma — ?unlockach=kill1,combo1 ve ?achstats=kills:600,runs:7
   if (params.get('unlockach')) {
     for (const id of params.get('unlockach').split(',')) {

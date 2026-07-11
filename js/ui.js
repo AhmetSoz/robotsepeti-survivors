@@ -57,7 +57,7 @@ const UI = {
       if (w.x > 500) Game.bgWalkers.splice(i, 1);
     }
 
-    const items = 7;
+    const items = 8;
     this.navVertical(items);
     const hit = this.titleMenuHit();
     if (hit >= 0) Game.menuIdx = hit;
@@ -70,19 +70,103 @@ const UI = {
         Game.state = 'select'; Game.selIdx = 0;
       }
       else if (Game.menuIdx === 1) { Game.state = 'daily'; }
-      else if (Game.menuIdx === 2) { Game.state = 'shop'; Game.menuIdx = 0; }
-      else if (Game.menuIdx === 3) { Game.state = 'album'; Game.menuIdx = 0; }
-      else if (Game.menuIdx === 4) { Game.state = 'scores'; Game.scoresT = Game.uiT; this.scoresTab = 0; Game.fetchScores(); }
-      else if (Game.menuIdx === 5) { isFullscreen() ? exitFullscreen() : goFullscreen(); }
+      else if (Game.menuIdx === 2) { Game.state = 'forge'; }
+      else if (Game.menuIdx === 3) { Game.state = 'shop'; Game.menuIdx = 0; }
+      else if (Game.menuIdx === 4) { Game.state = 'album'; Game.menuIdx = 0; }
+      else if (Game.menuIdx === 5) { Game.state = 'scores'; Game.scoresT = Game.uiT; this.scoresTab = 0; Game.fetchScores(); }
+      else if (Game.menuIdx === 6) { isFullscreen() ? exitFullscreen() : goFullscreen(); }
       else { Sfx.setMute(!Sfx.muted); }
     }
   },
 
   titleMenuHit() {
-    for (let i = 0; i < 7; i++) {
-      if (Input.mouseIn(160, 158 + i * 13 - 3, 160, 12)) return i;
+    for (let i = 0; i < 8; i++) {
+      if (Input.mouseIn(160, 156 + i * 12 - 3, 160, 11)) return i;
     }
     return -1;
+  },
+
+  // ── SKİLL ATÖLYESİ (yerel ayrıştırıcı — minik kanıt) ──
+  forgeBox() { return document.getElementById('forgeBox'); },
+
+  updateForge() {
+    // gizli HTML input'u aç + senkronla (mobil klavye için)
+    const fb = this.forgeBox();
+    if (fb) {
+      if (fb.style.display !== 'block') {
+        fb.style.display = 'block';
+        fb.value = Forge.input || '';
+        if (!Input.touchMode) fb.focus();
+      }
+      // input değerini oyuna al (temiz)
+      Forge.input = fb.value.slice(0, 60);
+    }
+
+    if (Input.back() || this.backHit()) {
+      if (fb) { fb.blur(); fb.style.display = 'none'; }
+      Game.state = 'title'; Game.menuIdx = 0; Sfx.play('click'); return;
+    }
+    // metin kutusuna dokun → klavye aç (mobil)
+    if (Input.mouse.clicked && Input.mouseIn(60, 66, 360, 26) && fb && Input.touchMode) fb.focus();
+
+    // ANLA butonu → cümleyi çöz
+    if (Input.mouse.clicked && Input.mouseIn(90, 120, 140, 20)) {
+      Forge.data.ability = parseAbility(Forge.input || '');
+      Forge.save(); Sfx.play('select');
+    }
+    // TEST ET butonu → özel yetenekle koşu başlat
+    if (Forge.data.ability && !Forge.data.ability.unknown &&
+        Input.mouse.clicked && Input.mouseIn(250, 120, 140, 20)) {
+      if (fb) { fb.blur(); fb.style.display = 'none'; }
+      if (Input.touchMode) goFullscreen();
+      Sfx.play('select');
+      Game.startForgeTest('ahmet');
+    }
+  },
+
+  drawForge(ctx) {
+    World.drawFloor(ctx, 777, 333, Game.uiT);
+    this.dim(ctx, 0.78);
+    this.backBtn(ctx);
+    drawText(ctx, 'SKİLL ATÖLYESİ', 240, 12, COL.teal, { align: 'center', scale: 2, shadow: COL.outline });
+    drawText(ctx, 'YETENEĞİNİ KENDİ CÜMLELERİNLE YAZ, OYUN ANLASIN', 240, 34, COL.greyLight, { align: 'center' });
+
+    // metin kutusu (yazı canvas'ta çizilir, gerçek input görünmez)
+    this.panel(ctx, 60, 66, 360, 26, COL.navy);
+    const cursor = ((Game.uiT * 3) | 0) % 2 ? '_' : '';
+    const shown = (Forge.input || '');
+    if (shown) drawText(ctx, (shown + cursor).slice(-56), 68, 74, COL.white);
+    else drawText(ctx, 'örn: öne büyük ateş konisi at, yaksın ve savursun' + cursor, 68, 74, COL.greyDark);
+
+    // butonlar
+    this.panel(ctx, 90, 120, 140, 20, COL.yellow);
+    drawText(ctx, 'ANLA', 160, 126, COL.yellow, { align: 'center', shadow: COL.outline });
+    const spec = Forge.data.ability;
+    const canTest = spec && !spec.unknown;
+    this.panel(ctx, 250, 120, 140, 20, canTest ? COL.green : COL.navy);
+    drawText(ctx, 'TEST ET (SPACE)', 320, 126, canTest ? COL.green : COL.navyDark, { align: 'center', shadow: COL.outline });
+
+    // çözümlenen reçete
+    if (spec) {
+      if (spec.unknown) {
+        drawText(ctx, 'HMM, ANLAYAMADIM. ŞU KELİMELERİ DENE:', 240, 158, COL.orange, { align: 'center' });
+        drawText(ctx, 'ateş · buz · zehir · şok · koni · halka · mermi', 240, 172, COL.greyLight, { align: 'center' });
+        drawText(ctx, 'savur · dondur · yavaşlat · büyük · hızlı', 240, 184, COL.greyLight, { align: 'center' });
+      } else {
+        this.panel(ctx, 40, 152, 400, 54, COL.teal);
+        drawText(ctx, 'ADI: ' + spec.name, 240, 158, COL.yellow, { align: 'center', shadow: COL.outline });
+        // özet iki satıra sar
+        const sum = specSummary(spec);
+        const lines = wrapText(sum, 46);
+        let sy = 172;
+        for (const ln of lines.slice(0, 2)) { drawText(ctx, ln, 240, sy, COL.greyLight, { align: 'center' }); sy += 11; }
+        drawText(ctx, 'ANLADIĞIM KELİMELER: ' + spec.matched.join(', '), 240, 196, COL.grey, { align: 'center' });
+      }
+    } else {
+      drawText(ctx, 'CÜMLENİ YAZ, "ANLA"YA BAS.', 240, 165, COL.greyDark, { align: 'center' });
+    }
+
+    drawText(ctx, 'MASAÜSTÜNDE DOĞRUDAN YAZ · MOBİLDE KUTUYA DOKUN · ESC: GERİ', 240, 250, COL.greyDark, { align: 'center' });
   },
 
   // ── GÜNÜN VARDİYASI onay ekranı ──
@@ -179,6 +263,7 @@ const UI = {
     const achN = Achievements.countDone();
     const labels = ['BAŞLA',
       'GÜNÜN VARDİYASI',
+      'SKİLL ATÖLYESİ *YENİ*',
       'DÜKKAN',
       'ALBÜM (' + achN + '/' + ACH_DEFS.length + ')',
       'SKOR TABLOSU',
@@ -186,7 +271,7 @@ const UI = {
       'SES: ' + (Sfx.muted ? 'KAPALI' : 'AÇIK')];
     for (let i = 0; i < labels.length; i++) {
       const sel = Game.menuIdx === i;
-      const y = 158 + i * 13;
+      const y = 156 + i * 12;
       if (sel) {
         drawText(ctx, '>', 240 - textW(labels[i]) / 2 - 14, y, COL.yellow, { shadow: COL.outline });
       }
