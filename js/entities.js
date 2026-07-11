@@ -1214,7 +1214,7 @@ function updateEnemies(dt) {
     arr.push(e);
   }
 
-  const dmgMul = (1 + Game.time / 60 * 0.12) * Math.pow(1.04, Math.max(0, (Game.time - 1200) / 60));
+  const dmgMul = (1 + Game.time / 60 * 0.12) * Math.pow(1.04, Math.max(0, (Game.time - 1200) / 60)) * (Game.shiftFx ? Game.shiftFx.dmg : 1);
 
   for (const e of Game.enemies) {
     if (e.dead) continue;
@@ -1474,7 +1474,7 @@ function updateEnemies(dt) {
 function explodeBomber(e) {
   const p = Game.player;
   const b = e.type.bomb;
-  const dmgMul = (1 + Game.time / 60 * 0.12) * Math.pow(1.04, Math.max(0, (Game.time - 1200) / 60));
+  const dmgMul = (1 + Game.time / 60 * 0.12) * Math.pow(1.04, Math.max(0, (Game.time - 1200) / 60)) * (Game.shiftFx ? Game.shiftFx.dmg : 1);
   Sfx.play('explode');
   Game.shake = Math.max(Game.shake, 4);
   Game.shocks.push({ x: e.x, y: e.y - 4, r: b.r, t: 0, col: COL.orange });
@@ -1529,7 +1529,7 @@ function bossSummon(e) {
 // Toptancı: oyuncunun konumuna palet fırlatır (telegraf + alan hasarı)
 function bossLob(e) {
   const p = Game.player, cfg = e.type.lob;
-  const dmgMul = (1 + Game.time / 60 * 0.12) * Math.pow(1.04, Math.max(0, (Game.time - 1200) / 60));
+  const dmgMul = (1 + Game.time / 60 * 0.12) * Math.pow(1.04, Math.max(0, (Game.time - 1200) / 60)) * (Game.shiftFx ? Game.shiftFx.dmg : 1);
   for (let i = 0; i < cfg.n; i++) {
     Game.hazards.push({
       kind: 'pallet', x0: e.x, y0: e.y - 20,
@@ -1544,7 +1544,7 @@ function bossLob(e) {
 // Karaborsacı: gökten para yağar, düştüğü yer yakar
 function bossRain(e) {
   const p = Game.player, cfg = e.type.rain;
-  const dmgMul = (1 + Game.time / 60 * 0.12) * Math.pow(1.04, Math.max(0, (Game.time - 1200) / 60));
+  const dmgMul = (1 + Game.time / 60 * 0.12) * Math.pow(1.04, Math.max(0, (Game.time - 1200) / 60)) * (Game.shiftFx ? Game.shiftFx.dmg : 1);
   for (let i = 0; i < cfg.n; i++) {
     const tx = p.x + rand(-85, 85), ty = p.y + rand(-55, 55);
     Game.hazards.push({
@@ -1690,7 +1690,7 @@ function collectPickup(pk) {
       break;
     }
     case 'coin':
-      Game.coins += Game.dailyFx ? Game.dailyFx.coinMul : 1;
+      Game.coins += Math.round((Game.dailyFx ? Game.dailyFx.coinMul : 1) * (Game.shiftFx ? Game.shiftFx.reward : 1));
       Game.score += Math.round(30 * p.greed);
       Sfx.play('coin');
       addFloat(pk.x, pk.y - 8, '+PARA', COL.gold);

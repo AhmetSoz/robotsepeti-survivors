@@ -544,6 +544,24 @@ const UI = {
     const cid = CHAR_ORDER[Game.selIdx];
     if (Input.pressed['KeyQ']) this.cycleTech(cid, 'weapons');
     if (Input.pressed['KeyE']) this.cycleTech(cid, 'skills');
+    // vardiya zorluğu: 1-5 tuşları ya da V kutularına dokunma
+    const shiftMax = Achievements.stats.shiftMax || 1;
+    for (let i = 0; i < 5; i++) {
+      const nn = i + 1;
+      const pressKey = Input.pressed['Digit' + nn];
+      const clickBox = Input.mouse.clicked && Input.mouseIn(56, 210, 5 * 20 + 4, 19) &&
+        Input.mouseIn(58 + i * 20 - 2, 210, 21, 19);
+      if (pressKey || clickBox) {
+        if (nn <= shiftMax) {
+          Meta.data.shift = nn; Meta.save(); Sfx.play('click');
+          this.tipFlash = { txt: SHIFT_DEFS[nn - 1].name + ': ' + SHIFT_DEFS[nn - 1].desc, until: Game.uiT + 2 };
+        } else {
+          Sfx.play('hurt');
+          this.tipFlash = { txt: 'KİLİTLİ: VARDİYA ' + (nn - 1) + "'İ 15 DK GEÇ", until: Game.uiT + 2 };
+        }
+        if (clickBox) return;
+      }
+    }
     // kutucuk üzerinde bilgi kartı (hover); dokunmatikte tıklayınca 3 sn kalır
     // dokunma hedefleri büyük (25x25 bölge, 21px kutu) — mobil parmak dostu
     this.tipSlot = null;
@@ -669,7 +687,28 @@ const UI = {
     const lo = Meta.loadout(id);
     const w = WEAPONS[lo.w];
     const sk = SKILLS[lo.s];
-    drawText(ctx, 'Q/E VEYA KUTUCUKLAR: TEKNİK SEÇ · ÜSTÜNE GEL: BİLGİ', 240, 216, COL.greyLight, { align: 'center', shadow: COL.outline });
+    // vardiya zorluğu seçici (V1-V5): bir üst vardiya, alttakini 15dk geçince açılır
+    const shiftMax = Achievements.stats.shiftMax || 1;
+    const selShift = clamp(Meta.data.shift || 1, 1, 5);
+    drawText(ctx, 'ZORLUK:', 12, 216, COL.greyLight, { shadow: COL.outline });
+    for (let i = 0; i < 5; i++) {
+      const nn = i + 1;
+      const x = 58 + i * 20;
+      const openS = nn <= shiftMax;
+      const cur = nn === selShift;
+      ctx.fillStyle = cur ? 'rgba(254,231,97,0.2)' : 'rgba(24,20,37,0.6)';
+      ctx.fillRect(x, 212, 17, 15);
+      ctx.strokeStyle = cur ? COL.yellow : (openS ? COL.greyDark : COL.navyDark);
+      ctx.strokeRect(x + 0.5, 212.5, 16, 14);
+      // bu karakterle tamamlandıysa altın nokta
+      if (Achievements.stats['shift_' + id + '_' + nn]) {
+        ctx.fillStyle = COL.gold; ctx.fillRect(x + 12, 214, 3, 3);
+      }
+      drawText(ctx, 'V' + nn, x + 3, 216, openS ? (cur ? COL.yellow : COL.white) : COL.navyDark);
+    }
+    const sdf = SHIFT_DEFS[selShift - 1];
+    drawText(ctx, (sdf.desc + ' · ÖDÜL x' + sdf.reward).slice(0, 30), 168, 216, COL.teal);
+    drawText(ctx, 'Q/E: TEKNİK', 470, 216, COL.greyLight, { align: 'right' });
     this.panel(ctx, 10, 224, 460, 42, def.color);
     ctx.drawImage(SPR.icons[lo.w] || SPR.icons.box, 16, 226);
     drawText(ctx, (w.name + ': ' + w.desc).slice(0, 56), 34, 228, COL.white);

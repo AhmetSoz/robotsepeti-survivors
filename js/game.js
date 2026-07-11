@@ -72,6 +72,10 @@ const Game = {
         for (const k in m.fx) this.dailyFx[k] = m.fx[k];
       }
     }
+    // vardiya zorluğu (1-5): seçime göre çarpanlar
+    this.shiftN = clamp(Meta.data.shift || 1, 1, 5);
+    const sd = SHIFT_DEFS[this.shiftN - 1];
+    this.shiftFx = { hp: sd.hp, dmg: sd.dmg, rate: sd.rate, reward: sd.reward };
     this.player = makePlayer(charId);
     this.kills = 0; this.coins = 0; this.score = 0;
     this.won = false; this.savedRank = -1;
@@ -117,7 +121,7 @@ const Game = {
 
   // fazla mesaide skor çarpanı: her 15 dakikada +1x
   scoreMul() {
-    return 1 + Math.floor(this.time / WIN_TIME);
+    return (1 + Math.floor(this.time / WIN_TIME)) * (this.shiftFx ? this.shiftFx.reward : 1);
   },
 
   // ── güncelleme ──
@@ -328,6 +332,12 @@ const Game = {
     // fazla mesai! (kazanma yok, oyun sonsuz devam eder)
     if (this.time >= WIN_TIME && !this.overtime) {
       this.overtime = true;
+      // vardiya tamamlandı: kalıcı kayıt + bir üst vardiyanın kilidi
+      const sk = 'shift_' + this.player.charId + '_' + this.shiftN;
+      if (!Achievements.stats[sk]) Achievements.stats[sk] = 1;
+      if ((Achievements.stats.shiftMax || 1) < this.shiftN + 1) Achievements.stats.shiftMax = Math.min(5, this.shiftN + 1);
+      Achievements.event('shift' + this.shiftN);
+      Achievements.save();
       this.banner = { txt: 'PAYDOS YOK! FAZLA MESAİ BAŞLADI: x2 SKOR!', t: 0 };
       const p = this.player;
       p.hp = Math.min(p.maxHp, p.hp + Math.round(p.maxHp * 0.3));
@@ -345,6 +355,7 @@ const Game = {
     // 5. dakikadan sonra temposu ekstra artar (hız itemleri rahatlatmasın)
     if (this.lullT > 0) this.lullT -= dt;
     let rate = (1.1 + t * 0.011 + Math.max(0, (t - 300) * 0.0035)) * (this.lullT > 0 ? 0.45 : 1);
+    if (this.shiftFx) rate *= this.shiftFx.rate;
     if (t > WIN_TIME - 50) rate *= 2.2;
     this.spawnAcc += rate * dt;
     while (this.spawnAcc >= 1) {

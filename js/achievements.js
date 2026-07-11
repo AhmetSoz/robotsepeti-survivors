@@ -47,6 +47,8 @@ const ACH_DEFS = [
   { id: 'run2',    name: 'MESAİ BAĞIMLISI',    desc: '25 koşu tamamla',                 key: 'runs', scope: 'total', target: 25, reward: { coins: 75 } },
   { id: 'time1',   name: 'DEMİRBAŞ',           desc: 'Toplam 1 saat oyna',              key: 'time', scope: 'total', target: 3600, reward: { coins: 60 } },
   { id: 'daily1',  name: 'GÜNÜN ELEMANI',      desc: '5 Günün Vardiyası tamamla',       key: 'daily', scope: 'total', target: 5, reward: { coins: 80 } },
+  { id: 'shift3',  name: 'YOĞUN MESAİ USTASI', desc: 'Vardiya 3 zorluğunda 15 dk dayan', key: 'shift3', scope: 'total', target: 1, reward: { coins: 100 } },
+  { id: 'shift5',  name: 'DEPO CEHENNEMİNDEN ÇIKAN', desc: 'Vardiya 5 zorluğunda 15 dk dayan', key: 'shift5', scope: 'total', target: 1, reward: { coins: 150, costume: 'kral' } },
   // ── karaktere özel ──
   { id: 'champ',   name: 'ŞAMPİYON',           desc: 'Ahmet: 50 şampiyon vuruşu yap',   key: 'champ',  scope: 'total', target: 50, char: 'ahmet', reward: { coins: 45, unlock: 't_kemer' } },
   { id: 'freeze',  name: 'SORU BANKASI',       desc: 'Can: toplam 100 müşteri dondur',  key: 'freeze', scope: 'total', target: 100, char: 'can', reward: { coins: 45, unlock: 't_soru' } },

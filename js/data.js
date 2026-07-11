@@ -855,6 +855,15 @@ const BOSS_CYCLE_GAP = 150;
 // build profili → counter boss eşlemesi (nemesis sistemi)
 const COUNTER_BY_PROFILE = { melee: 'pazarlamaci', ranged: 'lojistik', mobile: 'takipci' };
 
+// ─── Vardiya zorluğu 1-5 (Brotato danger): V(n) için V(n-1)'i 15dk geç ───
+const SHIFT_DEFS = [
+  { n: 1, name: 'VARDİYA 1', desc: 'Standart mesai',                    hp: 1,    dmg: 1,    rate: 1,    reward: 1 },
+  { n: 2, name: 'VARDİYA 2', desc: 'Müşteriler sertleşir (+%25)',       hp: 1.25, dmg: 1.2,  rate: 1.15, reward: 1.3 },
+  { n: 3, name: 'VARDİYA 3', desc: 'Yoğun mesai (+%50)',                hp: 1.5,  dmg: 1.4,  rate: 1.3,  reward: 1.6 },
+  { n: 4, name: 'VARDİYA 4', desc: 'Kabus vardiyası (+%75)',            hp: 1.75, dmg: 1.6,  rate: 1.45, reward: 2 },
+  { n: 5, name: 'VARDİYA 5', desc: 'Depo cehennemi (+%100)',            hp: 2,    dmg: 1.8,  rate: 1.6,  reward: 2.5 }
+];
+
 // ─── Günün Vardiyası modifiye edicileri (tohumdan 2'si seçilir) ───
 // fx alanları Game.dailyFx'e işlenir; ilgili sistemler oradan okur.
 const DAILY_MODS = [
