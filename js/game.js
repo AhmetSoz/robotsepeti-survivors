@@ -63,6 +63,7 @@ const Game = {
     this.overtime = false; this.nextBossT = WIN_TIME + 90; this.bossCycleIdx = 0;
     this.achQueue = []; this.achToast = null;
     this.slowT = 0; this.slowK = 1; this.decoy = null;
+    this.reportT = 300; this.repKills = 0; this.repCoins = 0; this.report = null;
     Missions.reset();
     Achievements.startRun();
     this.eliteT = charId === 'berker' ? 48 : 60;
@@ -141,6 +142,22 @@ const Game = {
 
     // ağır çekim yeteneği sayacı
     if (this.slowT > 0) this.slowT -= dt;
+
+    // VARDİYA RAPORU: her 5 dakikada bir ilerleme özeti + küçük bonus
+    if (this.time >= this.reportT) {
+      const dk = Math.round(this.reportT / 60);
+      const dKill = this.kills - (this.repKills || 0);
+      const dCoin = this.coins - (this.repCoins || 0);
+      this.repKills = this.kills; this.repCoins = this.coins;
+      this.report = { t: 0, dk, kills: dKill, coins: dCoin, combo: this.comboBest };
+      this.score += 100 * (dk / 5);
+      this.reportT += 300;
+      Sfx.play('mission');
+    }
+    if (this.report) {
+      this.report.t += dt;
+      if (this.report.t > 4) this.report = null;
+    }
 
     // sahte hedef (decoy): süre bitince patlar
     if (this.decoy) {
@@ -256,7 +273,7 @@ const Game = {
   // ── dalga yönetmeni ──
   director(dt) {
     const t = this.time;
-    const cap = t > 420 ? 180 : 140;
+    const cap = t > 1200 ? 220 : (t > 420 ? 180 : 140);
 
     // sürekli akış: akın sonrası kısa nefes molası, son dakikada çılgınlık
     // 5. dakikadan sonra temposu ekstra artar (hız itemleri rahatlatmasın)
@@ -362,20 +379,50 @@ const Game = {
       Sfx.play('boss');
       this.shake = Math.max(this.shake, 4);
     }
-    // fazla mesai boss döngüsü: sırayla, her turda daha da güçlenerek dönerler
+    // fazla mesai boss döngüsü: sırayla, her turda daha da güçlenerek dönerler.
+    // Her 2. boss NEMESIS: oyuncunun build'ini okuyup counter'ını yollar.
     if (t >= this.nextBossT) {
-      this.nextBossT = t + BOSS_CYCLE_GAP;
-      const id = BOSS_POOL[this.bossCycleIdx++ % BOSS_POOL.length];
+      const lapNow = Math.ceil((this.bossCycleIdx + 1) / BOSS_POOL.length);
+      // aralık her turda kısalır: 150 → 90 sn
+      this.nextBossT = t + Math.max(90, BOSS_CYCLE_GAP - (lapNow - 1) * 15);
+      let id, nemesis = false;
+      if (this.bossCycleIdx % 2 === 1 && t >= 720) {
+        id = COUNTER_BY_PROFILE[this.buildProfile()] || BOSS_POOL[this.bossCycleIdx % BOSS_POOL.length];
+        nemesis = true;
+      } else {
+        id = BOSS_POOL[this.bossCycleIdx % BOSS_POOL.length];
+      }
+      this.bossCycleIdx++;
       const boss = this.spawnAt(id);
       const lap = Math.ceil(this.bossCycleIdx / BOSS_POOL.length);
       boss.hp = boss.maxHp = Math.round(boss.hp * (1 + 0.25 * lap));
+      boss.lap = lap;   // kan parası: ölünce tur başına bonus para
       this.bossAlive = true;
-      this.banner = { txt: ENEMY_TYPES[id].name + ' GERİ DÖNDÜ! DAHA DA ÖFKELİ!', t: 0 };
-      this.bossIntro = { t: 0, name: ENEMY_TYPES[id].name };
-      this.shocks.push({ x: boss.x, y: boss.y - 8, r: 70, t: 0, col: COL.purple });
+      // tur ilerledikçe unvan: KIDEMLİ (2+) / EFSANE (4+)
+      const title = (lap >= 4 ? 'EFSANE ' : lap >= 2 ? 'KIDEMLİ ' : '') + ENEMY_TYPES[id].name;
+      this.banner = nemesis
+        ? { txt: 'DEPO SENİ İZLİYOR: ' + title + ' GELDİ!', t: 0 }
+        : { txt: title + ' GERİ DÖNDÜ! DAHA DA ÖFKELİ!', t: 0 };
+      this.bossIntro = { t: 0, name: title };
+      this.shocks.push({ x: boss.x, y: boss.y - 8, r: 70, t: 0, col: nemesis ? COL.red : COL.purple });
       Sfx.play('boss');
       this.shake = Math.max(this.shake, 4);
     }
+  },
+
+  // Oyuncunun build profili: counter boss seçimi için okunur
+  buildProfile() {
+    const p = this.player;
+    let melee = 0, ranged = 0;
+    for (const w of p.weapons) {
+      const k = WEAPONS[w.id].kind;
+      if (k === 'pulse' || k === 'cone' || k === 'orbit') melee++;
+      else if (k === 'proj' || k === 'homing' || k === 'thrown' || k === 'car') ranged++;
+    }
+    if (p.spd >= 80) return 'mobile';           // hız yığmış kaçak build
+    if (melee > ranged) return 'melee';
+    if (ranged > melee) return 'ranged';
+    return pick(['melee', 'ranged', 'mobile']);
   },
 
   spawnOne() {
@@ -490,7 +537,31 @@ const Game = {
         if (p.hp < p.maxHp * 0.7) pool.push({ kind: 'item', id, name: it.name, desc: it.desc, lvl: 0, weight: 1 });
         continue;
       }
-      if (cur < it.max) pool.push({ kind: 'item', id, name: it.name, desc: it.desc, lvl: cur + 1, weight: 1 });
+      if (cur < it.max) {
+        // evrim ipucu: bu item, sahip olunan bir silahın evrim anahtarıysa söyle
+        let evo = null;
+        for (const w of p.weapons) {
+          const ev = EVOLUTIONS[w.id];
+          if (ev && !w.evolved && ev.need === id) { evo = ev.name; break; }
+        }
+        pool.push({ kind: 'item', id, name: it.name, desc: it.desc, lvl: cur + 1, weight: evo ? 1.4 : 1, evo });
+      }
+    }
+    // SONSUZ STAT KARTLARI: havuz asla boşalmaz, geç oyunda da gelişirsin
+    // (rakipler sonsuza kadar güçlendiği için sen de sonsuza kadar güçlenmelisin)
+    const b = p.bonus;
+    pool.push({ kind: 'stat', id: 'st_hp',    icon: 'enerji',   name: 'ÇELİK VÜCUT',  desc: '+%6 maks can (sınırsız)',  lvl: b.hp + 1,    weight: 0.6 });
+    pool.push({ kind: 'stat', id: 'st_dmg',   icon: 'robotkol', name: 'KESKİN BİLEK', desc: '+%5 hasar (sınırsız)',     lvl: b.dmg + 1,   weight: 0.6 });
+    pool.push({ kind: 'stat', id: 'st_armor', icon: 'sigorta',  name: 'KALIN DERİ',   desc: '+1 zırh (sınırsız)',       lvl: b.armor + 1, weight: 0.5 });
+    pool.push({ kind: 'stat', id: 'st_spd',   icon: 'kahve',    name: 'SERİ ADIM',    desc: '+%3 hız (sınırsız)',       lvl: b.spd + 1,   weight: 0.5 });
+    pool.push({ kind: 'stat', id: 'st_greed', icon: 'prim',     name: 'ŞANS PARASI',  desc: '+%8 para/skor (sınırsız)', lvl: b.greed + 1, weight: 0.4 });
+    // YETENEK DEĞİŞTİRME: açık başka varyantın varsa koşu ortasında geçiş yap
+    const others = (TECHS[p.charId].skills || []).filter(sid =>
+      sid !== p.skill.id && Meta.techUnlocked(p.charId, 'skills', sid));
+    if (others.length && p.skill.lvl >= 2) {
+      const sid = pick(others);
+      pool.push({ kind: 'skillswap', id: sid, name: 'YETENEK DEĞİŞ: ' + SKILLS[sid].name,
+        desc: SKILLS[sid].desc, lvl: p.skill.lvl, weight: 0.5 });
     }
     // ağırlıklı, tekrarsız 3 seçim
     const opts = [];
@@ -516,6 +587,24 @@ const Game = {
       p.weapons.push(makeWeapon(o.id));
     } else if (o.kind === 'skill') {
       p.skill.lvl++;
+    } else if (o.kind === 'skillswap') {
+      // koşu ortasında yetenek değiştir (seviye korunur)
+      p.skill.id = o.id;
+      p.skill.cd = Math.min(p.skill.cd, 3);
+      this.banner = { txt: 'YENİ YETENEK: ' + SKILLS[o.id].name + '!', t: 0 };
+    } else if (o.kind === 'stat') {
+      // sonsuz stat kartı: kalıcı koşu-içi bonus
+      const b = p.bonus;
+      if (o.id === 'st_hp') {
+        b.hp++;
+        const add = Math.round(p.maxHp * 0.06);
+        p.maxHp += add; p.hp += add;
+      }
+      else if (o.id === 'st_dmg') b.dmg++;
+      else if (o.id === 'st_armor') b.armor++;
+      else if (o.id === 'st_spd') b.spd++;
+      else b.greed++;
+      recalcStats(p);
     } else if (ITEMS[o.id].heal) {
       p.hp = Math.min(p.maxHp, p.hp + Math.round(p.maxHp * 0.4));
     } else {
@@ -574,6 +663,19 @@ const Game = {
       } else if (o.kind === 'skill') {
         p.skill.lvl++;
         rewards.push({ name: o.name + ' SV' + p.skill.lvl, icon: o.id });
+      } else if (o.kind === 'stat') {
+        const b = p.bonus;
+        if (o.id === 'st_hp') { b.hp++; const add = Math.round(p.maxHp * 0.06); p.maxHp += add; p.hp += add; }
+        else if (o.id === 'st_dmg') b.dmg++;
+        else if (o.id === 'st_armor') b.armor++;
+        else if (o.id === 'st_spd') b.spd++;
+        else b.greed++;
+        recalcStats(p);
+        rewards.push({ name: o.name + ' SV' + o.lvl, icon: o.icon });
+      } else if (o.kind === 'skillswap') {
+        p.skill.id = o.id;
+        p.skill.cd = Math.min(p.skill.cd, 3);
+        rewards.push({ name: 'YENİ YETENEK: ' + SKILLS[o.id].name, icon: SKILLS[o.id].icon });
       } else if (ITEMS[o.id].heal) {
         p.hp = Math.min(p.maxHp, p.hp + Math.round(p.maxHp * 0.4));
         rewards.push({ name: o.name, icon: o.id });

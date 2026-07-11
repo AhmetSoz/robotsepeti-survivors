@@ -766,6 +766,72 @@ const ENEMY_TYPES = {
     tele: { cd: 7, burst: 12, projSpd: 82, dmg: 12 },
     summon: { cd: 8, id: 'kurye', n: 2 },
     slam: { cd: 9, wind: 0.8, dmg: 14, maxR: 95 }
+  },
+
+  // ── COUNTER BOSSLAR: oyuncunun build'ine göre gelen nemesis'ler ──
+  // counter alanı buildProfile() çıktısıyla eşleşir; dk12+ döngüde gelirler.
+  pazarlamaci: {
+    name: 'PAZARLAMA MÜDÜRÜ',
+    hp: 3800, dmg: 24, speed: 20, scale: 2.3, xp: 100, score: 5500,
+    shirt: COL.pink, shade: COL.purpleDark, skin: COL.skin,
+    boss: true, counter: 'melee',
+    // yakın dövüşçünün kabusu: yaklaşınca kaçar, uzaktan yelpaze sıkar, sıkışınca ışınlanır
+    flee: { r: 130, k: 1.7 },
+    shotgun: { cd: 3.2, n: 6, spread: 0.9, projSpd: 95, dmg: 13 },
+    tele: { cd: 10, burst: 6, projSpd: 80, dmg: 12 },
+    overlay: { oy: 0, map: { H: COL.gold, S: COL.outline, P: COL.pink }, rows: [
+      '..HHHHHHHH..',
+      '.HHHHHHHHHH.',
+      '.SSSS..SSSS.',
+      '............',
+      '............',
+      '............',
+      '............',
+      '....PPPP....',
+      '....PPPP....'
+    ]}
+  },
+  lojistik: {
+    name: 'LOJİSTİK ŞEFİ',
+    hp: 4200, dmg: 26, speed: 18, scale: 2.4, xp: 110, score: 6000,
+    shirt: COL.orange, shade: COL.orangeDark, skin: COL.skinAlt,
+    boss: true, counter: 'ranged',
+    // menzilcinin kabusu: uzak durur, mermilerden yana kaçar, araç/kargo yağdırır
+    keepaway: { r: 170 },
+    dodges: true,
+    carAtk: { cd: 4.5, dmg: 20 },
+    lob: { cd: 6, n: 3, dmg: 16, r: 26, warn: 0.9 },
+    overlay: { oy: 0, map: { H: COL.orange, o: COL.outline, V: COL.yellow }, rows: [
+      '..oHHHHHHo..',
+      '.oHHHHHHHHo.',
+      '............',
+      '............',
+      '............',
+      '.V........V.',
+      '.V........V.',
+      '............',
+      '............'
+    ]}
+  },
+  takipci: {
+    name: 'TAKİP UZMANI',
+    hp: 4600, dmg: 30, speed: 26, scale: 2.2, xp: 120, score: 6500,
+    shirt: COL.hairDark, shade: COL.outline, skin: COL.skin,
+    boss: true, counter: 'mobile',
+    // kaçakçının kabusu: mermilerden kaçar, önünü keser, gitgide hızlanır
+    dodges: true, predict: true,
+    accel: { per: 10, k: 0.08, cap: 2.2 },
+    overlay: { oy: 0, map: { H: COL.outline, S: COL.greyDark, R: COL.red }, rows: [
+      '.HHHHHHHHHH.',
+      'HHHHHHHHHHHH',
+      '.SSSS..SSSS.',
+      '..R......R..',
+      '............',
+      '............',
+      '............',
+      '............',
+      '............'
+    ]}
   }
 };
 
@@ -778,3 +844,5 @@ const BOSS_SCHEDULE = [
 // Fazla mesaide dönen boss havuzu (90 sn arayla, güçleri zamanla ölçeklenir)
 const BOSS_POOL = ['toptanci', 'karaborsaci', 'mudur', 'patron', 'rakip'];
 const BOSS_CYCLE_GAP = 150;
+// build profili → counter boss eşlemesi (nemesis sistemi)
+const COUNTER_BY_PROFILE = { melee: 'pazarlamaci', ranged: 'lojistik', mobile: 'takipci' };

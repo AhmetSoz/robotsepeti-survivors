@@ -588,7 +588,8 @@ const UI = {
         // içerik satırları
         const descLines = wrapText(tdef.desc, 34).slice(0, 2);
         const achName = open ? null : this.achFor('t_' + tid);
-        const h = 26 + descLines.length * 10 + (open ? 10 : (achName ? 20 : 10));
+        const evExtra = (tip.listName === 'weapons' && EVOLUTIONS[tid]) ? 10 : 0;
+        const h = 26 + descLines.length * 10 + (open ? 10 : (achName ? 20 : 10)) + evExtra;
         const bx = 240, by = 210 - h;
         this.panel(ctx, bx, by, 230, h, open ? COL.teal : COL.gold);
         const icon = SPR.icons[isW ? tid : tdef.icon];
@@ -604,6 +605,12 @@ const UI = {
         } else {
           drawText(ctx, 'KİLİTLİ · DÜKKAN: ' + TECH_COST[tip.idx] + ' PARA', bx + 6, ty, COL.gold);
           if (achName) drawText(ctx, 'VEYA BAŞARIM: ' + achName, bx + 6, ty + 10, COL.yellow);
+        }
+        // evrim rehberi: silahın evrim tarifi (SV6 + hangi item)
+        if (isW && EVOLUTIONS[tid]) {
+          const ev = EVOLUTIONS[tid];
+          drawText(ctx, ('EVRİM: SV6 + ' + ITEMS[ev.need].name + ' ' + ev.needLvl + ' = ' + ev.name).slice(0, 38),
+            bx + 6, ty + (open ? 10 : (achName ? 20 : 10)), COL.purple);
         }
       }
     }
@@ -702,6 +709,12 @@ const UI = {
       }
       ctx.drawImage(SPR.icons[w.id] || SPR.icons.box, x, wy - 1);
       drawText(ctx, w.evolved ? 'E' : w.lvl, x + 13, wy + 4, w.evolved ? COL.gold : COL.white, { shadow: COL.outline });
+      // evrim rehberi: SV6'da altın "!" — koli açınca evrimleşir / item eksikse ipucu
+      const ev = EVOLUTIONS[w.id];
+      if (ev && !w.evolved && w.lvl >= WEAPON_MAX_LVL && ((Game.uiT * 3) | 0) % 2) {
+        const ready = (p.items[ev.need] || 0) >= ev.needLvl;
+        drawText(ctx, '!', x + 5, wy - 10, ready ? COL.gold : COL.greyDark, { shadow: COL.outline });
+      }
     }
     let ix = 20 + wn * 26;
     for (const id in p.items) {
@@ -820,6 +833,21 @@ const UI = {
       drawText(ctx, Game.banner.txt, 240, by + 3, COL.yellow, { align: 'center', scale: 1, shadow: COL.outline, alpha: clamp(a * blink, 0, 1) });
     }
 
+    // vardiya raporu: 5 dakikada bir ilerleme özeti (gelişme hissi)
+    if (Game.report) {
+      const rp = Game.report;
+      const slide = rp.t < 0.3 ? (1 - rp.t / 0.3) * 40 : (rp.t > 3.5 ? (rp.t - 3.5) / 0.5 * 40 : 0);
+      ctx.save();
+      ctx.globalAlpha = clamp(4 - rp.t, 0, 1);
+      this.panel(ctx, 320 + slide, 92, 154, 58, COL.gold);
+      drawText(ctx, rp.dk + '. DAKİKA RAPORU', 397 + slide, 97, COL.gold, { align: 'center', shadow: COL.outline });
+      drawText(ctx, 'DEVRİLEN: +' + rp.kills, 328 + slide, 110, COL.white);
+      drawText(ctx, 'KAZANÇ: +' + rp.coins + ' PARA', 328 + slide, 121, COL.yellow);
+      drawText(ctx, 'REKOR KOMBO: x' + rp.combo, 328 + slide, 132, COL.teal);
+      drawText(ctx, 'BÖYLE DEVAM!', 397 + slide, 142, COL.green, { align: 'center' });
+      ctx.restore();
+    }
+
     drawText(ctx, 'ESC: MOLA', 474, 258, COL.navy, { align: 'right' });
   },
 
@@ -866,7 +894,7 @@ const UI = {
         ctx.strokeStyle = 'rgba(254,231,97,' + (0.4 + pulse * 0.6) + ')';
         ctx.strokeRect(r.x - 1.5, r.y - 1.5, r.w + 3, r.h + 3);
       }
-      const icon = SPR.icons[o.id];
+      const icon = SPR.icons[o.icon || (o.kind === 'skillswap' ? SKILLS[o.id].icon : o.id)];
       if (icon) ctx.drawImage(icon, r.x + r.w / 2 - 12, r.y + 8, 24, 24);
       const lines = wrapText(o.name, 16);
       let ty = r.y + 38;
@@ -875,14 +903,24 @@ const UI = {
         const tag = o.kind === 'newweapon' ? 'YENİ SİLAH!'
           : o.kind === 'weapon' ? 'SİLAH SV' + o.lvl
           : o.kind === 'skill' ? 'YETENEK SV' + o.lvl
+          : o.kind === 'stat' ? 'SONSUZ KART SV' + o.lvl
+          : o.kind === 'skillswap' ? 'YETENEK TAKASI'
           : 'SEVİYE ' + o.lvl;
-        const tcol = o.kind === 'newweapon' ? COL.orange : (o.kind === 'skill' ? COL.yellow : COL.teal);
+        const tcol = o.kind === 'newweapon' ? COL.orange
+          : (o.kind === 'skill' || o.kind === 'skillswap') ? COL.yellow
+          : o.kind === 'stat' ? COL.green : COL.teal;
         drawText(ctx, tag, r.x + r.w / 2, ty + 2, tcol, { align: 'center' });
         ty += 12;
       }
       const dlines = wrapText(o.desc, 16);
       ty += 4;
       for (const ln of dlines) { drawText(ctx, ln, r.x + r.w / 2, ty, COL.grey, { align: 'center' }); ty += 9; }
+      // evrim rehberi: bu item bir silahın evrim anahtarı
+      if (o.evo) {
+        const blink = 0.6 + Math.sin(Game.uiT * 6) * 0.4;
+        drawText(ctx, '► EVRİME GİDER:', r.x + r.w / 2, ty + 2, COL.gold, { align: 'center', alpha: blink });
+        drawText(ctx, o.evo, r.x + r.w / 2, ty + 11, COL.gold, { align: 'center', alpha: blink });
+      }
       drawText(ctx, '' + (i + 1), r.x + 5, r.y + 4, COL.greyDark);
     }
     drawText(ctx, '1/2/3 VEYA OK + ENTER', 240, 208, COL.greyDark, { align: 'center' });

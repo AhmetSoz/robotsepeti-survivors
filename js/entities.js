@@ -49,6 +49,7 @@ function makePlayer(charId) {
     questionT: 3,       // Can pasifi sayacı
     // aktif yetenek + robot kol
     skill: { id: lo.s, lvl: 1, cd: 4, wasReady: false },
+    bonus: { hp: 0, dmg: 0, armor: 0, spd: 0, greed: 0 },   // sonsuz stat kartları
     dashS: null, turboT: 0, turboHit: null, magnetBoostT: 0,
     shieldT: 0, turboPickT: 0, afterT: 0, lean: 0, turnT: 0,
     armT: 1, armAnim: null,
@@ -66,8 +67,8 @@ function recalcStats(p) {
   p.spd = 64 * d.speed * (1 + lv('kahve') * 0.08) * (1 + Meta.lvl('hiz') * 0.03);
   p.armor = lv('sigorta');
   p.cdr = Math.min(0.5, lv('klavye') * 0.07);
-  // her seviye kalıcı +%1.5 güç: koşu boyu hissedilir büyüme
-  p.might = (1 + lv('robotkol') * 0.09) * (1 + (Game.level - 1) * 0.015) * (1 + Meta.lvl('guc') * 0.04);
+  // her seviye kalıcı +%2 güç: koşu boyu hissedilir büyüme (sonsuz ölçek desteği)
+  p.might = (1 + lv('robotkol') * 0.09) * (1 + (Game.level - 1) * 0.02) * (1 + Meta.lvl('guc') * 0.04);
   p.crit = 0.05 + lv('robotkol') * 0.04;
   p.magnetR = 26 * (1 + lv('miknatis') * 0.22) * (1 + Meta.lvl('cekim') * 0.15);
   p.greed = 1 + lv('prim') * 0.12;
@@ -86,6 +87,12 @@ function recalcStats(p) {
   if (cs.dodge) p.dodge += cs.dodge;
   if (cs.greed) p.greed += cs.greed;
   if (cs.xp) p.xpGain += cs.xp;
+  // sonsuz stat kartları (koşu-içi kalıcı bonus sayaçları)
+  const b = p.bonus || (p.bonus = { hp: 0, dmg: 0, armor: 0, spd: 0, greed: 0 });
+  p.might *= 1 + b.dmg * 0.05;
+  p.armor += b.armor;
+  p.spd *= 1 + b.spd * 0.03;
+  p.greed += b.greed * 0.08;
 }
 
 function weaponStats(p, w) {
@@ -194,6 +201,10 @@ function updatePlayer(dt) {
       }
     }
   }
+
+  // anlık hız: öngörücü (predict) counter boss oyuncunun önünü kesmek için okur
+  p.mvx = p.moving ? dx * p.spd * spdMul : 0;
+  p.mvy = p.moving ? dy * p.spd * spdMul : 0;
 
   if (p.moving) {
     p.x += dx * p.spd * spdMul * dt;
@@ -794,11 +805,19 @@ function updateWeaponEntities(dt) {
       addPart({ x: c.x - c.dir * rand(4, 14), y: c.y - rand(2, 12), vx: -c.dir * 20, vy: -rand(5, 20),
         dur: 0.35, type: 'spark', col: pick([COL.gold, COL.yellow]) });
     }
-    for (const e of Game.enemies) {
-      if (c.hit.has(e.id)) continue;
-      if (Math.abs(e.y - c.y) < c.band && Math.abs(e.x - c.x) < 17) {
-        c.hit.add(e.id);
-        damageEnemy(e, c.dmg, c.dir * c.kb, rand(-60, 60));
+    if (c.enemy) {
+      // düşman aracı (Lojistik Şefi'nin sevkiyatı): OYUNCUYA çarpar
+      if (!c.hitP && Math.abs(p.y - c.y) < c.band && Math.abs(p.x - c.x) < 17) {
+        c.hitP = true;
+        damagePlayer(c.dmg);
+      }
+    } else {
+      for (const e of Game.enemies) {
+        if (c.hit.has(e.id)) continue;
+        if (Math.abs(e.y - c.y) < c.band && Math.abs(e.x - c.x) < 17) {
+          c.hit.add(e.id);
+          damageEnemy(e, c.dmg, c.dir * c.kb, rand(-60, 60));
+        }
       }
     }
     if (c.life <= 0) Game.cars.splice(i, 1);
@@ -966,7 +985,8 @@ const TIER_MODS = {
 
 function spawnEnemy(typeId, x, y, tier) {
   const t = ENEMY_TYPES[typeId];
-  const hpMul = 1 + Game.time / 60 * 0.42 + Math.max(0, (Game.time - 420) / 60 * 0.5);
+  const hpMul = (1 + Game.time / 60 * 0.42 + Math.max(0, (Game.time - 420) / 60 * 0.5))
+    * Math.pow(1.06, Math.max(0, (Game.time - 1200) / 60));   // dk20+ bileşik sertleşme
   const tm = TIER_MODS[tier] || null;
   const e = {
     id: nextEntityId++,
@@ -1128,6 +1148,18 @@ function killEnemy(e) {
     Game.bossAlive = false;
     Game.bossChestQ++;       // kuyruk: iki boss art arda ölse de her ödül ayrı açılır
     Game.bossChestT = Math.max(Game.bossChestT, 1.0);
+    // nemesis (counter boss) devirmek ekstra ödüllendirir
+    if (e.type.counter) {
+      const bonus = 10 + Math.floor(Game.time / 300) * 3;
+      Game.coins += bonus;
+      addFloat(e.x, e.y - 28, 'NEMESIS DEVRİLDİ! +' + bonus + ' PARA', COL.gold, true);
+    }
+    // kan parası: döngü bossları her turda daha çok para bırakır
+    if (e.lap) {
+      const kan = e.lap * 5;
+      Game.coins += kan;
+      addFloat(e.x, e.y - 20, 'KAN PARASI +' + kan, COL.red, true);
+    }
     Game.freeze = 0.25;
     Game.shake = Math.max(Game.shake, 6);
     // boss ölüm şovu: beyaz flaş + çifte şok halkası + kıvılcım yağmuru
@@ -1174,7 +1206,7 @@ function updateEnemies(dt) {
     arr.push(e);
   }
 
-  const dmgMul = 1 + Game.time / 60 * 0.12;
+  const dmgMul = (1 + Game.time / 60 * 0.12) * Math.pow(1.04, Math.max(0, (Game.time - 1200) / 60));
 
   for (const e of Game.enemies) {
     if (e.dead) continue;
@@ -1239,6 +1271,58 @@ function updateEnemies(dt) {
         }
       } else {
         let mx = dx / d, my = dy / d;
+
+        // ── counter boss davranışları ──
+        // kaçak (anti-melee): yaklaşan oyuncudan uzaklaşır
+        if (e.type.flee && d < e.type.flee.r) {
+          mx = -mx * e.type.flee.k; my = -my * e.type.flee.k;
+        } else if (e.type.keepaway) {
+          // mesafeci (anti-ranged): menzilini korur
+          if (d < e.type.keepaway.r * 0.8) { mx = -mx; my = -my; }
+          else if (d < e.type.keepaway.r) { mx *= 0.15; my *= 0.15; }
+        }
+        // öngörücü (anti-koşucu): oyuncunun gideceği yeri keser
+        if (e.type.predict && p.moving) {
+          const px2 = p.x + (p.mvx || 0) * 0.55, py2 = p.y + (p.mvy || 0) * 0.55;
+          const dd2 = Math.sqrt(dist2(e.x, e.y, px2, py2)) || 1;
+          mx = (px2 - e.x) / dd2; my = (py2 - e.y) / dd2;
+        }
+        // mermi/araç savan boss: tehdit yaklaşınca yana sıçrar
+        if (e.type.dodges) {
+          e.dodgeCd = (e.dodgeCd || 0) - dt;
+          if (e.dodgeCd <= 0) {
+            let th = null;
+            for (const pr of Game.projs) {
+              if (dist2(pr.x, pr.y, e.x, e.y) < 55 * 55) { th = pr; break; }
+            }
+            if (!th) {
+              for (const c of Game.cars) {
+                if (!c.enemy && Math.abs(c.y - e.y) < 20 && Math.abs(c.x - e.x) < 90) {
+                  th = { vx: c.dir * c.spd, vy: 0 }; break;
+                }
+              }
+            }
+            if (th) {
+              const da = Math.atan2(th.vy || 0, th.vx || 1) + (Math.random() < 0.5 ? Math.PI / 2 : -Math.PI / 2);
+              e.kx += Math.cos(da) * 240; e.ky += Math.sin(da) * 240;
+              e.dodgeCd = 0.9;
+              addFloat(e.x, e.y - 16 * e.type.scale, 'KAÇTI!', COL.teal);
+            }
+          }
+        }
+        // araç yağdıran boss (anti-ranged): oyuncunun şeridine forklift yollar
+        if (e.type.carAtk) {
+          e.carCd = (e.carCd === undefined ? e.type.carAtk.cd * 0.5 : e.carCd) - dt;
+          if (e.carCd <= 0) {
+            e.carCd = e.type.carAtk.cd;
+            const dir2 = Math.random() < 0.5 ? 1 : -1;
+            Game.cars.push({ enemy: true, x: p.x - dir2 * 300, y: p.y + rand(-12, 12), dir: dir2,
+              spd: 230, dmg: e.type.carAtk.dmg * dmgMul, kb: 0, band: 14,
+              hit: new Set(), hitP: false, life: 3.2, vis: 'fork' });
+            addFloat(e.x, e.y - 16 * e.type.scale, 'SEVKİYAT!', COL.orange);
+            Sfx.play('horn');
+          }
+        }
 
         if (e.type.wander) {
           e.wanderT += dt * 2;
@@ -1333,6 +1417,11 @@ function updateEnemies(dt) {
         if (e.enraged) spd *= 1.15;                              // boss öfkesi
         if (e.type.patron && e.hp < e.maxHp * 0.3) spd *= 1.5;   // patron çılgın fazı
         if (Game.slowT > 0) spd *= Game.slowK;                   // ağır çekim yeteneği
+        if (e.type.accel) {
+          // takipçi boss: yaşadıkça hızlanır (kaçış build'inin counteri)
+          e.aliveT = (e.aliveT || 0) + dt;
+          spd *= Math.min(e.type.accel.cap, 1 + Math.floor(e.aliveT / e.type.accel.per) * e.type.accel.k);
+        }
         e.x += mx * spd * dt;
         e.y += my * spd * dt;
         e.flip = p.x < e.x;
@@ -1377,7 +1466,7 @@ function updateEnemies(dt) {
 function explodeBomber(e) {
   const p = Game.player;
   const b = e.type.bomb;
-  const dmgMul = 1 + Game.time / 60 * 0.12;
+  const dmgMul = (1 + Game.time / 60 * 0.12) * Math.pow(1.04, Math.max(0, (Game.time - 1200) / 60));
   Sfx.play('explode');
   Game.shake = Math.max(Game.shake, 4);
   Game.shocks.push({ x: e.x, y: e.y - 4, r: b.r, t: 0, col: COL.orange });
@@ -1432,7 +1521,7 @@ function bossSummon(e) {
 // Toptancı: oyuncunun konumuna palet fırlatır (telegraf + alan hasarı)
 function bossLob(e) {
   const p = Game.player, cfg = e.type.lob;
-  const dmgMul = 1 + Game.time / 60 * 0.12;
+  const dmgMul = (1 + Game.time / 60 * 0.12) * Math.pow(1.04, Math.max(0, (Game.time - 1200) / 60));
   for (let i = 0; i < cfg.n; i++) {
     Game.hazards.push({
       kind: 'pallet', x0: e.x, y0: e.y - 20,
@@ -1447,7 +1536,7 @@ function bossLob(e) {
 // Karaborsacı: gökten para yağar, düştüğü yer yakar
 function bossRain(e) {
   const p = Game.player, cfg = e.type.rain;
-  const dmgMul = 1 + Game.time / 60 * 0.12;
+  const dmgMul = (1 + Game.time / 60 * 0.12) * Math.pow(1.04, Math.max(0, (Game.time - 1200) / 60));
   for (let i = 0; i < cfg.n; i++) {
     const tx = p.x + rand(-85, 85), ty = p.y + rand(-55, 55);
     Game.hazards.push({
@@ -1975,13 +2064,16 @@ function drawPlayField(ctx) {
     else ctx.drawImage(SPR.minibox, sx - 4, sy - 4);
   }
 
-  // arabalar (evrimde altın kaplama konvoy)
+  // arabalar (evrimde altın kaplama konvoy; düşman aracı kırmızı ünlemli)
   for (const c of Game.cars) {
     const [sx, sy] = W2S(c.x, c.y);
     drawShadow(ctx, sx, sy + 2, 15, 4);
     const set = c.evo ? SPR.evo : SPR;
     const carSpr = c.vis === 'fork' ? set.fork : set.car;
     ctx.drawImage(c.dir > 0 ? carSpr.n : carSpr.f, sx - 16, sy - 15);
+    if (c.enemy) {
+      drawText(ctx, '!', sx - 2, sy - 26, COL.red, { shadow: COL.outline });
+    }
   }
 
   // düşman mermileri: koli / dönen yıldız / banknot
@@ -2122,13 +2214,14 @@ function drawPlayerSprite(ctx) {
   const sx = Math.round(p.x - Game.camX + 240);
   const sy = Math.round(p.y - Game.camY + 135);
 
-  // seviye aurası: SV10+ hafif, SV20+ güçlü, SV30+ altın efsane halkası
+  // seviye aurası: SV10+ hafif, SV20+ güçlü, SV30+ altın, SV40+ kızıl efsane
   if (Game.level >= 10) {
     const strong = Game.level >= 20;
     const legend = Game.level >= 30;
+    const myth = Game.level >= 40;
     ctx.save();
     ctx.globalAlpha = (strong ? 0.3 : 0.16) + Math.sin(Game.time * 4) * 0.06;
-    ctx.strokeStyle = legend ? COL.gold : p.def.color; ctx.lineWidth = 1;
+    ctx.strokeStyle = myth ? COL.red : (legend ? COL.gold : p.def.color); ctx.lineWidth = 1;
     const ar = 12 + Math.sin(Game.time * 3) * 1.5;
     ctx.beginPath(); ctx.ellipse(sx, sy, ar, ar * 0.45, 0, 0, TAU); ctx.stroke();
     if (strong) {
