@@ -57,7 +57,7 @@ const UI = {
       if (w.x > 500) Game.bgWalkers.splice(i, 1);
     }
 
-    const items = 6;
+    const items = 7;
     this.navVertical(items);
     const hit = this.titleMenuHit();
     if (hit >= 0) Game.menuIdx = hit;
@@ -66,21 +66,59 @@ const UI = {
       if (Game.menuIdx === 0) {
         // mobilde oyuna girerken otomatik tam ekran (uygulama hissi)
         if (Input.touchMode) goFullscreen();
+        Game.dailyPending = false;
         Game.state = 'select'; Game.selIdx = 0;
       }
-      else if (Game.menuIdx === 1) { Game.state = 'shop'; Game.menuIdx = 0; }
-      else if (Game.menuIdx === 2) { Game.state = 'album'; Game.menuIdx = 0; }
-      else if (Game.menuIdx === 3) { Game.state = 'scores'; Game.scoresT = Game.uiT; Game.fetchScores(); }
-      else if (Game.menuIdx === 4) { isFullscreen() ? exitFullscreen() : goFullscreen(); }
+      else if (Game.menuIdx === 1) { Game.state = 'daily'; }
+      else if (Game.menuIdx === 2) { Game.state = 'shop'; Game.menuIdx = 0; }
+      else if (Game.menuIdx === 3) { Game.state = 'album'; Game.menuIdx = 0; }
+      else if (Game.menuIdx === 4) { Game.state = 'scores'; Game.scoresT = Game.uiT; this.scoresTab = 0; Game.fetchScores(); }
+      else if (Game.menuIdx === 5) { isFullscreen() ? exitFullscreen() : goFullscreen(); }
       else { Sfx.setMute(!Sfx.muted); }
     }
   },
 
   titleMenuHit() {
-    for (let i = 0; i < 6; i++) {
-      if (Input.mouseIn(160, 162 + i * 14 - 3, 160, 12)) return i;
+    for (let i = 0; i < 7; i++) {
+      if (Input.mouseIn(160, 158 + i * 13 - 3, 160, 12)) return i;
     }
     return -1;
+  },
+
+  // ── GÜNÜN VARDİYASI onay ekranı ──
+  updateDaily() {
+    if (Input.back() || this.backHit()) { Game.state = 'title'; Game.menuIdx = 0; Sfx.play('click'); return; }
+    const startHit = Input.mouse.clicked && Input.mouseIn(170, 190, 140, 22);
+    if (Input.confirm() || startHit) {
+      Sfx.play('select');
+      if (Input.touchMode) goFullscreen();
+      Game.dailyPending = true;
+      Game.state = 'select'; Game.selIdx = 0;
+    }
+  },
+
+  drawDaily(ctx) {
+    World.drawFloor(ctx, 777, 333, Game.uiT);
+    this.dim(ctx, 0.72);
+    this.backBtn(ctx);
+    drawText(ctx, 'GÜNÜN VARDİYASI', 240, 20, COL.teal, { align: 'center', scale: 2, shadow: COL.outline });
+    drawText(ctx, dailyKey() + ' · HERKESE AYNI KOŞULLAR, AYRI SKOR TABLOSU', 240, 42, COL.greyLight, { align: 'center' });
+
+    // bugünün modifiye edicileri
+    const mods = Game.todayMods();
+    for (let i = 0; i < mods.length; i++) {
+      const y = 66 + i * 44;
+      this.panel(ctx, 90, y, 300, 36, COL.teal);
+      drawText(ctx, mods[i].name, 240, y + 7, COL.yellow, { align: 'center', shadow: COL.outline });
+      drawText(ctx, mods[i].desc, 240, y + 21, COL.greyLight, { align: 'center' });
+    }
+
+    // başlat butonu
+    const pulse = 0.6 + Math.sin(Game.uiT * 5) * 0.4;
+    this.panel(ctx, 170, 190, 140, 22, COL.yellow);
+    drawText(ctx, 'VARDİYAYA BAŞLA', 240, 197, COL.yellow, { align: 'center', shadow: COL.outline, alpha: pulse });
+    drawText(ctx, 'SKORUN BUGÜNÜN TABLOSUNA YAZILIR (7 GÜN SAKLANIR)', 240, 226, COL.greyDark, { align: 'center' });
+    drawText(ctx, 'ENTER: BAŞLA · ESC: GERİ', 240, 250, COL.greyLight, { align: 'center' });
   },
 
   drawTitle(ctx) {
@@ -139,14 +177,16 @@ const UI = {
 
     // menü
     const achN = Achievements.countDone();
-    const labels = ['BAŞLA', 'DÜKKAN',
+    const labels = ['BAŞLA',
+      'GÜNÜN VARDİYASI',
+      'DÜKKAN',
       'ALBÜM (' + achN + '/' + ACH_DEFS.length + ')',
       'SKOR TABLOSU',
       'TAM EKRAN: ' + (isFullscreen() ? 'AÇIK' : 'KAPALI'),
       'SES: ' + (Sfx.muted ? 'KAPALI' : 'AÇIK')];
     for (let i = 0; i < labels.length; i++) {
       const sel = Game.menuIdx === i;
-      const y = 162 + i * 14;
+      const y = 158 + i * 13;
       if (sel) {
         drawText(ctx, '>', 240 - textW(labels[i]) / 2 - 14, y, COL.yellow, { shadow: COL.outline });
       }
@@ -1266,9 +1306,29 @@ const UI = {
   },
 
   // ── SKOR TABLOSU ──
+  scoresTab: 0,   // 0: tüm zamanlar, 1: bugünün vardiyası
+
   updateScores() {
     // kayıttan hemen sonra gelen dokunuş tabloyu kapatmasın
     if (Game.uiT - (Game.scoresT || 0) < 0.6) return;
+    // sekme değiştir: A/D ya da sekme başlığına dokun
+    if (Input.pressed['ArrowLeft'] || Input.pressed['KeyA'] ||
+        Input.pressed['ArrowRight'] || Input.pressed['KeyD']) {
+      this.scoresTab = 1 - this.scoresTab;
+      Game.fetchScores(this.scoresTab === 1);
+      Sfx.play('click');
+      return;
+    }
+    for (let tb = 0; tb < 2; tb++) {
+      if (Input.mouse.clicked && Input.mouseIn(130 + tb * 115, 24, 105, 16)) {
+        if (this.scoresTab !== tb) {
+          this.scoresTab = tb;
+          Game.fetchScores(tb === 1);
+          Sfx.play('click');
+        }
+        return;   // sekme dokunuşu tabloyu kapatmasın
+      }
+    }
     if (Input.back() || Input.confirm() || Input.mouse.clicked) {
       Game.state = 'title'; Game.menuIdx = 0;
       Sfx.stopMusic();
@@ -1280,7 +1340,19 @@ const UI = {
     World.drawFloor(ctx, 777, 333, Game.uiT);
     this.dim(ctx, 0.7);
     this.backBtn(ctx);
-    drawText(ctx, 'SKOR TABLOSU', 240, 14, COL.gold, { align: 'center', scale: 2, shadow: COL.outline });
+    drawText(ctx, 'SKOR TABLOSU', 240, 8, COL.gold, { align: 'center', scale: 2, shadow: COL.outline });
+
+    // sekmeler: TÜM ZAMANLAR / BUGÜN (günün vardiyası)
+    const stabs = ['TÜM ZAMANLAR', 'BUGÜN'];
+    for (let tb = 0; tb < 2; tb++) {
+      const on = this.scoresTab === tb;
+      const x = 130 + tb * 115;
+      ctx.fillStyle = on ? 'rgba(254,174,52,0.15)' : 'rgba(38,43,68,0.8)';
+      ctx.fillRect(x, 24, 105, 13);
+      ctx.strokeStyle = on ? COL.gold : COL.navy;
+      ctx.strokeRect(x + 0.5, 24.5, 104, 12);
+      drawText(ctx, stabs[tb], x + 52, 27, on ? COL.gold : COL.greyDark, { align: 'center' });
+    }
 
     const list = Game.loadScores();
 
@@ -1293,7 +1365,8 @@ const UI = {
     else                       { subTxt = SCORES_REMOTE ? 'ROBOTSEPETİ EKİP TABLOSU' : 'YEREL SKORLAR'; subCol = COL.teal; }
     const subOpts = { align: 'center', shadow: COL.outline };
     if (st === 'saving' || st === 'loading') subOpts.alpha = 0.5 + Math.sin(Game.uiT * 6) * 0.4;
-    drawText(ctx, subTxt, 240, 30, subCol, subOpts);
+    if (this.scoresTab === 1 && st === 'ok') { subTxt = 'GÜNÜN VARDİYASI: ' + dailyKey(); subCol = COL.teal; }
+    drawText(ctx, subTxt, 240, 41, subCol, subOpts);
 
     if (!list.length && st !== 'loading') {
       drawText(ctx, 'HENÜZ SKOR YOK. İLK REKORU SEN KIR!', 240, 120, COL.grey, { align: 'center' });

@@ -70,9 +70,14 @@ module.exports = async (req, res) => {
     return res.status(500).json({ ok: false, error: 'Veritabanı bağlı değil (Upstash ortam değişkenleri yok)' });
   }
 
+  // Günün Vardiyası: ?day=YYYY-MM-DD → ayrı günlük tablo (7 gün sonra silinir)
+  const qDay = (req.query && req.query.day) || '';
+  const day = /^\d{4}-\d{2}-\d{2}$/.test(qDay) ? qDay : null;
+
   try {
     if (req.method === 'GET') {
-      const [flat] = await pipe([['ZRANGE', KEY, '0', String(TOP - 1), 'REV', 'WITHSCORES']]);
+      const key = day ? 'rs_daily_' + day : KEY;
+      const [flat] = await pipe([['ZRANGE', key, '0', String(TOP - 1), 'REV', 'WITHSCORES']]);
       return res.status(200).json({ ok: true, list: parseList(flat) });
     }
 
@@ -92,19 +97,27 @@ module.exports = async (req, res) => {
       };
       const member = JSON.stringify(entry);
 
-      const results = await pipe([
-        ['ZADD', KEY, String(entry.score), member],
-        ['ZREVRANK', KEY, member],
-        ['ZRANGE', KEY, '0', String(TOP - 1), 'REV', 'WITHSCORES'],
-        ['ZCARD', KEY]
-      ]);
+      // günlük skor: gövdedeki day alanı da kabul edilir (query önce gelir)
+      const bDay = /^\d{4}-\d{2}-\d{2}$/.test(b.day || '') ? b.day : null;
+      const useDay = day || bDay;
+      const key = useDay ? 'rs_daily_' + useDay : KEY;
+
+      const cmds = [
+        ['ZADD', key, String(entry.score), member],
+        ['ZREVRANK', key, member],
+        ['ZRANGE', key, '0', String(TOP - 1), 'REV', 'WITHSCORES'],
+        ['ZCARD', key]
+      ];
+      // günlük tablolar 7 gün sonra kendiliğinden silinir
+      if (useDay) cmds.push(['EXPIRE', key, '604800']);
+      const results = await pipe(cmds);
       const rank = results[1];                 // 0 tabanlı sıra
       const list = parseList(results[2]);
       const card = Number(results[3]) || 0;
 
       // tablo KEEP'i aşarsa en düşük skorları buda (güvenli pozitif aralık)
       if (card > KEEP) {
-        await pipe([['ZREMRANGEBYRANK', KEY, '0', String(card - KEEP - 1)]]);
+        await pipe([['ZREMRANGEBYRANK', key, '0', String(card - KEEP - 1)]]);
       }
 
       return res.status(200).json({ ok: true, list, rank: rank == null ? -1 : Number(rank) });

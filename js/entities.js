@@ -1105,7 +1105,7 @@ function killEnemy(e) {
 
   // kombo zinciri
   Game.combo++;
-  Game.comboT = 2.2;
+  Game.comboT = Game.dailyFx ? Game.dailyFx.comboWin : 2.2;
   if (Game.combo > Game.comboBest) Game.comboBest = Game.combo;
   Missions.event('kill');
   Missions.event('combo', Game.combo);
@@ -1690,7 +1690,7 @@ function collectPickup(pk) {
       break;
     }
     case 'coin':
-      Game.coins++;
+      Game.coins += Game.dailyFx ? Game.dailyFx.coinMul : 1;
       Game.score += Math.round(30 * p.greed);
       Sfx.play('coin');
       addFloat(pk.x, pk.y - 8, '+PARA', COL.gold);

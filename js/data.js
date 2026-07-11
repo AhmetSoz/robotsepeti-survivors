@@ -854,3 +854,16 @@ const BOSS_POOL = ['toptanci', 'karaborsaci', 'mudur', 'patron', 'rakip'];
 const BOSS_CYCLE_GAP = 150;
 // build profili → counter boss eşlemesi (nemesis sistemi)
 const COUNTER_BY_PROFILE = { melee: 'pazarlamaci', ranged: 'lojistik', mobile: 'takipci' };
+
+// ─── Günün Vardiyası modifiye edicileri (tohumdan 2'si seçilir) ───
+// fx alanları Game.dailyFx'e işlenir; ilgili sistemler oradan okur.
+const DAILY_MODS = [
+  { id: 'kurye',  name: 'KURYE KRİZİ',     desc: 'Bombacı kuryeler 4 kat sık gelir',        fx: { kuryeW: 4 } },
+  { id: 'aceleci', name: 'ACELECİ GÜN',    desc: 'Müşteriler %20 hızlı ama %15 kırılgan',   fx: { spdMul: 1.2, hpMul: 0.85 } },
+  { id: 'saglam', name: 'SAĞLAM MÜŞTERİ',  desc: 'Müşteriler %40 dayanıklı, %10 yavaş',     fx: { hpMul: 1.4, spdMul: 0.9 } },
+  { id: 'kasa',   name: 'KASA YAĞMURU',    desc: 'Kasalar 3 kat sık düşer',                 fx: { crate: true } },
+  { id: 'elit',   name: 'ELİT SAATİ',      desc: 'Kızgın müşteri neredeyse hiç durmaz',     fx: { elite: true } },
+  { id: 'prim',   name: 'MESAİ PRİMİ',     desc: 'Tecrübe kazancı +%50',                    fx: { xpMul: 1.5 } },
+  { id: 'zam',    name: 'ZAM GÜNÜ',        desc: 'Para 2x ama müşteriler %20 dayanıklı',    fx: { coinMul: 2, hpMul: 1.2 } },
+  { id: 'kombo',  name: 'KOMBO GÜNÜ',      desc: 'Kombo penceresi neredeyse iki kat uzun',  fx: { comboWin: 4 } }
+];

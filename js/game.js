@@ -40,9 +40,38 @@ const Game = {
   remoteScores: null, scoresState: 'idle',
   bgWalkers: [],
 
+  // ── Günün Vardiyası yardımcıları ──
+  daily: false, dailyPending: false, dailyFx: null, rng: null,
+
+  todayMods() {
+    // tohumdan deterministik 2 farklı mod seç (herkese aynı)
+    const r = mulberry32(dailySeed() * 7 + 3);
+    const i1 = (r() * DAILY_MODS.length) | 0;
+    let i2 = (r() * DAILY_MODS.length) | 0;
+    if (i2 === i1) i2 = (i2 + 1) % DAILY_MODS.length;
+    return [DAILY_MODS[i1], DAILY_MODS[i2]];
+  },
+
+  dRand(n) {
+    // daily modda tohumlu, normalde standart rastgele (spawn akışı herkese benzer)
+    return this.daily && this.rng ? this.rng() * n : rand(n);
+  },
+
   // ── koşu başlat ──
   startRun(charId) {
     this.time = 0; this.xp = 0; this.level = 1;
+    // Günün Vardiyası: seçilmişse modları ve tohumlu RNG'yi kur
+    this.daily = this.dailyPending;
+    this.dailyPending = false;
+    this.dailyFx = null;
+    this.rng = null;
+    if (this.daily) {
+      this.rng = mulberry32(dailySeed());
+      this.dailyFx = { kuryeW: 1, spdMul: 1, hpMul: 1, crate: false, elite: false, xpMul: 1, coinMul: 1, comboWin: 2.2 };
+      for (const m of this.todayMods()) {
+        for (const k in m.fx) this.dailyFx[k] = m.fx[k];
+      }
+    }
     this.player = makePlayer(charId);
     this.kills = 0; this.coins = 0; this.score = 0;
     this.won = false; this.savedRank = -1;
@@ -71,7 +100,9 @@ const Game = {
     Missions.reset();
     Achievements.startRun();
     this.eliteT = charId === 'berker' ? 48 : 60;
-    this.banner = { txt: 'MESAİ BAŞLADI! MÜŞTERİLER GELİYOR!', t: 0 };
+    this.banner = this.daily
+      ? { txt: 'GÜNÜN VARDİYASI: ' + this.todayMods().map(m => m.name).join(' + ') + '!', t: 0 }
+      : { txt: 'MESAİ BAŞLADI! MÜŞTERİLER GELİYOR!', t: 0 };
     this.nameInput = ''; this.nameDone = false;
     this.state = 'play';
     Sfx.startMusic();
@@ -112,6 +143,7 @@ const Game = {
       case 'scores': UI.updateScores(); break;
       case 'shop': UI.updateShop(); break;
       case 'album': UI.updateAlbum(); break;
+      case 'daily': UI.updateDaily(); break;
     }
 
     if (this.banner) {
@@ -323,7 +355,7 @@ const Game = {
     // kırılabilir kasa/variller: sahada her zaman birkaç tane olsun
     this.crateT -= dt;
     if (this.crateT <= 0) {
-      this.crateT = 14;
+      this.crateT = this.dailyFx && this.dailyFx.crate ? 5 : 14;
       let crates = 0;
       for (const e of this.enemies) if (e.type.breakable) crates++;
       if (crates < 5) {
@@ -359,7 +391,7 @@ const Game = {
     // elit müşteri (koli taşıyıcısı)
     this.eliteT -= dt;
     if (this.eliteT <= 0) {
-      this.eliteT = this.player.charId === 'berker' ? 60 : 75;
+      this.eliteT = this.dailyFx && this.dailyFx.elite ? 45 : (this.player.charId === 'berker' ? 60 : 75);
       this.spawnAt('kizgin');
       this.banner = { txt: 'KIZGIN MÜŞTERİ GELDİ!', t: 0 };
       Sfx.play('akin');
@@ -465,11 +497,13 @@ const Game = {
     for (const id in ENEMY_TYPES) {
       const d = ENEMY_TYPES[id];
       if (d.elite || d.boss || !d.weight) continue;
-      if (t >= d.minTime) pool.push({ id, w: d.weight });
+      let w2 = d.weight;
+      if (id === 'kurye' && this.dailyFx) w2 *= this.dailyFx.kuryeW;
+      if (t >= d.minTime) pool.push({ id, w: w2 });
     }
     let total = 0;
     for (const o of pool) total += o.w;
-    let r = rand(total);
+    let r = this.dRand(total);
     for (const o of pool) {
       r -= o.w;
       if (r <= 0) { this.spawnAt(o.id); return; }
@@ -752,6 +786,7 @@ const Game = {
     Meta.deposit(this.coins);
     // koşu istatistikleri kalıcı sayaçlara işlenir
     Achievements.event('runs');
+    if (this.daily) Achievements.event('daily');
     Achievements.event('time', Math.floor(this.time));
     Achievements.save();
   },
@@ -776,9 +811,12 @@ const Game = {
       level: this.level,
       date: new Date().toISOString().slice(0, 10)
     };
+    // Günün Vardiyası skoru ayrı (günlük) tabloya gider
+    if (this.daily) entry.day = dailyKey();
     // her durumda yerel kopya tut (internet yoksa skor kaybolmasın)
     this.saveLocal(entry);
     this.state = 'scores';
+    UI.scoresTab = this.daily ? 1 : 0;
     this.scoresT = this.uiT;   // kayıt sonrası yanlışlıkla anında kapanmasın
     if (!SCORES_REMOTE) { this.scoresState = 'ok'; return; }
     // buluta gönder: dönüşte ortak tabloyu ve sıramızı al
@@ -813,11 +851,12 @@ const Game = {
   },
 
   // ortak tabloyu buluttan çek (skor ekranına girerken çağrılır)
-  fetchScores() {
+  // daily=true: bugünün vardiyası tablosu (rs_daily_<gün>)
+  fetchScores(daily) {
     this.savedRank = -1;
     if (!SCORES_REMOTE) { this.remoteScores = this.localScores(); this.scoresState = 'ok'; return; }
     this.scoresState = 'loading';
-    fetch(SCORES_API)
+    fetch(SCORES_API + (daily ? '?day=' + dailyKey() : ''))
       .then(r => r.json())
       .then(d => {
         if (!d || !d.list) throw new Error('gecersiz yanit');
@@ -842,6 +881,7 @@ const Game = {
     if (this.state === 'scores') { UI.drawScores(ctx); return; }
     if (this.state === 'shop') { UI.drawShop(ctx); return; }
     if (this.state === 'album') { UI.drawAlbum(ctx); return; }
+    if (this.state === 'daily') { UI.drawDaily(ctx); return; }
 
     // oyun sahnesi (play, levelup, chest, pause, over)
     this.camRX = this.camX + (this.shake > 0 ? rand(-this.shake, this.shake) : 0) + this.kickX;

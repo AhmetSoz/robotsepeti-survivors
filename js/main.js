@@ -62,6 +62,8 @@
   if (params.get('char')) {
     const c = params.get('char');
     if (CHARACTERS[c]) {
+      // günün vardiyası testi: ?daily=1 (modlar + tohumlu akış)
+      if (params.get('daily')) Game.dailyPending = true;
       // loadout testi: ?lw=kemer&ls=sampiyonk (kilidi otomatik açar)
       if (params.get('lw') || params.get('ls')) {
         const lw = params.get('lw'), ls = params.get('ls');
@@ -157,6 +159,7 @@
     if (params.get('tab')) UI.shopTab = parseInt(params.get('tab'), 10) || 0;
   }
   if (params.get('screen') === 'album') Game.state = 'album';
+  if (params.get('screen') === 'daily') Game.state = 'daily';
   // test: başarım/istatistik doldurma — ?unlockach=kill1,combo1 ve ?achstats=kills:600,runs:7
   if (params.get('unlockach')) {
     for (const id of params.get('unlockach').split(',')) {
