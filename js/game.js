@@ -24,6 +24,7 @@ const Game = {
   achQueue: [], achToast: null,
   slowT: 0, slowK: 1, decoy: null,
   hazards: [], eRings: [], afterimgs: [], beams: [], ambients: [],
+  orbs: [], forgeQueue: [], forgeFiring: false,   // atölye: küreler + kuyruk + rekürsiyon kilidi
   bossIntro: null, curZone: 'depo', roombaT: 6, sparkT: 12,
   ringT: 20, bossChestT: 0, bossChestQ: 0, t2Seen: false, t3Seen: false,
   spawnAcc: 0, eliteT: 60, hordeT: 120, bossIdx: 0, bossAlive: false, hordeN: 0,
@@ -85,6 +86,7 @@ const Game = {
     this.pickups = []; this.parts = []; this.floats = [];
     this.projs = []; this.corpses = []; this.decals = [];
     this.hazards = []; this.eRings = []; this.afterimgs = []; this.beams = []; this.ambients = [];
+    this.orbs = []; this.forgeQueue = [];
     this.bossIntro = null; this.curZone = 'depo'; this.roombaT = 6; this.sparkT = 12;
     this.ringT = 20; this.bossChestT = 0; this.bossChestQ = 0; this.t2Seen = false; this.t3Seen = false;
     this.spawnAcc = 0; this.hordeT = 120; this.bossIdx = 0; this.bossAlive = false; this.hordeN = 0;
@@ -115,17 +117,15 @@ const Game = {
     Sfx.startMusic();
   },
 
-  // SKİLL ATÖLYESİ testi: seçili karakterle başlat, SPACE yeteneğini
-  // oyuncunun ürettiği özel reçeteyle değiştir (anında dene).
+  // SKİLL ATÖLYESİ testi: takılı özel yeteneklerle koşu başlat.
+  // makePlayer zaten Forge.equippedSpecs()'i okuyup p.customs'ı ve (varsa)
+  // SPACE yeteneğini kurar — burada sadece koşuyu başlatıp duyuruyu yapıyoruz.
   startForgeTest(charId) {
-    const spec = Forge.data.ability;
-    if (!spec) return;
-    // custom yeteneği runtime'da SKILLS'e kaydet (skillStats cd'yi buradan okur)
-    SKILLS.custom = { kind: 'custom', name: spec.name, icon: 'sk_ahmet',
-      cd: spec.cd, base: {}, perLvl: {} };
-    this.startRun(charId || this.selChar || 'ahmet');
-    this.player.skill = { id: 'custom', lvl: 1, cd: 0, spec, wasReady: true };
-    this.banner = { txt: 'ÖZEL YETENEK: ' + spec.name + ' — SPACE İLE DENE!', t: 0 };
+    const eq = Forge.equippedSpecs();
+    if (!eq.length) return;
+    this.startRun(charId || 'ahmet');
+    const names = eq.map(s => s.name).join(' · ');
+    this.banner = { txt: 'ÖZEL YETENEK: ' + names, t: 0 };
   },
 
   xpNeeded(l) { return 8 + (l - 1) * 7 + Math.max(0, l - 8) * 6; },

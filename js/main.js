@@ -78,9 +78,13 @@
         if (ls) Meta.grantUnlock('t_' + ls);
         Meta.setLoadout(c, lw || TECHS[c].weapons[0], ls || TECHS[c].skills[0]);
       }
-      // skill atölyesi testi: ?char=ahmet&forge=<cümle> → özel yetenekle başla
+      // skill atölyesi testi: ?char=ahmet&forge=<cümle> → yeteneği üret, tak, başla
       if (params.get('forge')) {
-        Forge.data.ability = parseAbility(params.get('forge'));
+        const sp = parseAbility(params.get('forge'));
+        if (!sp.unknown) {
+          Forge.data.abilities.push(sp);
+          Forge.data.equipped[0] = sp.id;
+        }
         Game.startForgeTest(c);
       } else {
         Game.startRun(c);
@@ -211,7 +215,11 @@
   if (params.get('screen') === 'daily') Game.state = 'daily';
   if (params.get('screen') === 'forge') {
     Game.state = 'forge';
-    if (params.get('text')) { Forge.input = params.get('text'); Forge.data.ability = parseAbility(Forge.input); }
+    if (params.get('text')) {
+      Forge.input = params.get('text');
+      Forge.draft = parseAbility(Forge.input);
+      UI.forgeView = 'edit';
+    }
   }
   // test: başarım/istatistik doldurma — ?unlockach=kill1,combo1 ve ?achstats=kills:600,runs:7
   if (params.get('unlockach')) {

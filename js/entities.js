@@ -51,6 +51,9 @@ function makePlayer(charId) {
     skill: { id: lo.s, lvl: 1, cd: 4, wasReady: false },
     bonus: { hp: 0, dmg: 0, armor: 0, spd: 0, greed: 0 },   // sonsuz stat kartları
     trinkets: [],   // takılar (artı/eksili, en çok 3)
+    mightBuffT: 0, mightBuffK: 1, spdBuffT: 0, spdBuffK: 1,  // süreli atölye buff'ları
+    customs: [],    // atölye: takılı özel yetenekler [{spec, cd, iCd}]
+    lowHpCd: 0,
     dashS: null, turboT: 0, turboHit: null, magnetBoostT: 0,
     shieldT: 0, turboPickT: 0, afterT: 0, lean: 0, turnT: 0,
     armT: 1, armAnim: null,
@@ -58,8 +61,52 @@ function makePlayer(charId) {
     spd: 64, armor: 0, cdr: 0, might: 1, magnetR: 26, crit: 0.05,
     greed: 1, xpGain: 1, dodge: 0, stunChance: 0, dmgTakenMul: 1
   };
+  // SKİLL ATÖLYESİ: takılı özel yetenekler (3 slot). 'space' tetikli olan
+  // SPACE yeteneğinin yerine geçer; diğerleri (auto/onhit/...) arka planda çalışır.
+  const eq = (typeof Forge !== 'undefined') ? Forge.equippedSpecs() : [];
+  p.customs = eq.map(spec => ({ spec, cd: spec.trigger.kind === 'auto' ? spec.cd * 0.5 : 0 }));
+  const spaceSpec = eq.find(s => s.trigger.kind === 'space');
+  if (spaceSpec) {
+    SKILLS.custom = { kind: 'custom', name: spaceSpec.name, icon: 'sk_ahmet',
+      cd: spaceSpec.cd, base: {}, perLvl: {} };
+    p.skill = { id: 'custom', lvl: 1, cd: 0, spec: spaceSpec, wasReady: true };
+  }
   recalcStats(p);
   return p;
+}
+
+// ── Atölye tetikleri: her kare kontrol edilir (auto/lowhp), olaylar kanca ile ──
+function updateCustomTriggers(p, dt) {
+  if (!p.customs || !p.customs.length) return;
+  for (const c of p.customs) {
+    const tk = c.spec.trigger.kind;
+    if (tk === 'space') continue;   // SPACE yolu useSkill'de
+    if (c.cd > 0) { c.cd -= dt; continue; }
+    if (tk === 'auto') {
+      c.cd = c.spec.trigger.every;
+      runAbility(c.spec, p);
+    } else if (tk === 'lowhp') {
+      if (p.hp < p.maxHp * (c.spec.trigger.hp || 0.3)) {
+        c.cd = Math.max(8, c.spec.cd);
+        runAbility(c.spec, p);
+      }
+    }
+  }
+}
+
+// Olay tetikleri (damageEnemy/killEnemy/damagePlayer içinden çağrılır).
+// Yeniden-giriş kilidi: yetenek vurunca tekrar kendini tetiklemesin (sonsuz döngü).
+function fireCustomEvent(kind) {
+  const p = Game.player;
+  if (!p || !p.customs || Game.state !== 'play' || Game.forgeFiring) return;
+  for (const c of p.customs) {
+    const t = c.spec.trigger;
+    if (t.kind !== kind || c.cd > 0) continue;
+    if (t.chance && Math.random() > t.chance) continue;
+    c.cd = Math.max(1.5, c.spec.cd * 0.5);
+    Game.forgeFiring = true;
+    try { runAbility(c.spec, p); } finally { Game.forgeFiring = false; }
+  }
 }
 
 function recalcStats(p) {
@@ -108,6 +155,9 @@ function recalcStats(p) {
     if (fx.cdr) p.cdr = Math.min(0.6, p.cdr + fx.cdr);
     if (fx.taken) p.dmgTakenMul *= 1 + fx.taken;
   }
+  // süreli buff'lar (atölye 'rage'/'haste' op'ları) — sayaç bitince recalcStats tekrar çağrılır
+  if (p.mightBuffT > 0) p.might *= (p.mightBuffK || 1);
+  if (p.spdBuffT > 0) p.spd *= (p.spdBuffK || 1);
   p.armor = Math.max(0, p.armor);
 }
 
@@ -206,6 +256,17 @@ function updatePlayer(dt) {
   }
   if (p.magnetBoostT > 0) p.magnetBoostT -= dt;
   if (p.shieldT > 0) p.shieldT -= dt;
+  // süreli atölye buff'ları: bitince statları yeniden hesapla
+  if (p.mightBuffT > 0) {
+    p.mightBuffT -= dt;
+    if (p.mightBuffT <= 0) { p.mightBuffT = 0; recalcStats(p); }
+  }
+  if (p.spdBuffT > 0) {
+    p.spdBuffT -= dt;
+    if (p.spdBuffT <= 0) { p.spdBuffT = 0; recalcStats(p); }
+  }
+  if (p.lowHpCd > 0) p.lowHpCd -= dt;
+  updateCustomTriggers(p, dt);   // atölye: otomatik / düşük-can tetikleri
   if (p.turboPickT > 0) {
     p.turboPickT -= dt;
     spdMul *= 1.6;
@@ -495,6 +556,7 @@ function damagePlayer(amount) {
     return;
   }
   Game.lastHurtT = Game.time;
+  fireCustomEvent('onhurt');   // atölye: "hasar alınca" tetiği
   const dmg = Math.max(1, Math.round(amount * p.dmgTakenMul) - p.armor);
   p.hp -= dmg;
   p.invuln = 0.7;
@@ -855,6 +917,7 @@ function updateWeaponEntities(dt) {
         const kb = r.kb || 60;
         if (r.dmg > 0) damageEnemy(e, r.dmg, Math.cos(a) * kb, Math.sin(a) * kb);
         if (r.stun) e.stun = Math.max(e.stun, r.stun);
+        if (r.forgePay) applyForgePayload(r.forgePay, e);   // atölye halkası: yakma/zehir vb.
         if (Math.random() < 0.3) {
           addPart({ x: e.x, y: e.y - 14, vx: rand(-10, 10), vy: -25, dur: 0.6,
             type: 'note', col: r.col || COL.purple });
@@ -877,6 +940,7 @@ function updateWeaponEntities(dt) {
       for (const e of Game.enemies) {
         if (dist2(cl.x, cl.y, e.x, e.y - 4) < cl.r * cl.r) {
           damageEnemy(e, cl.dps * 0.4, 0, 0, true);
+          if (cl.forgePay) applyForgePayload(cl.forgePay, e);   // atölye bulutu: zehir/yavaşlatma
         }
       }
       addPart({ x: cl.x + rand(-cl.r, cl.r) * 0.6, y: cl.y + rand(-cl.r, cl.r) * 0.4,
@@ -981,7 +1045,7 @@ function updateWeaponEntities(dt) {
       const r = 5 + 5 * e.type.scale;
       if (dist2(pr.x, pr.y, e.x, e.y - 6) < r * r) {
         damageEnemy(e, pr.dmg, pr.vx * 0.25, pr.vy * 0.25);
-        if (pr.forge) forgeApplyPayloads(pr.forge, e);   // atölye mermisi: dondur/yavaşlat taşır
+        if (pr.payload) applyForgePayload(pr.payload, e);   // atölye mermisi: yakma/dondurma taşır
         if (pr.hit) {
           pr.hit.add(e.id);
           pr.pierce--;
@@ -991,6 +1055,29 @@ function updateWeaponEntities(dt) {
       }
     }
     if (dead) Game.projs.splice(i, 1);
+  }
+
+  // atölye yörünge küreleri: döner, değdiğine vurur
+  for (let i = Game.orbs.length - 1; i >= 0; i--) {
+    const o = Game.orbs[i];
+    o.t += dt;
+    o.angle += o.rot * dt;
+    if (o.t > o.dur) { Game.orbs.splice(i, 1); continue; }
+    const ang = o.angle + (o.i / o.n) * TAU;
+    const ox = p.x + Math.cos(ang) * o.r;
+    const oy = p.y - 6 + Math.sin(ang) * o.r * 0.7;
+    for (const e of Game.enemies) {
+      if (e.dead || e.spawnT > 0 || e.orbCd > 0) continue;
+      const rr = 7 + 5 * e.type.scale;
+      if (dist2(ox, oy, e.x, e.y - 6) < rr * rr) {
+        e.orbCd = 0.4;
+        damageEnemy(e, o.dmg, (e.x - p.x) * 3, (e.y - p.y) * 3);
+        if (o.payload) applyForgePayload(o.payload, e);
+      }
+    }
+    if (Math.random() < 8 * dt) {
+      addPart({ x: ox, y: oy, vx: rand(-8, 8), vy: rand(-8, 8), dur: 0.3, type: 'spark', col: o.col });
+    }
   }
 }
 
@@ -1019,6 +1106,8 @@ function spawnEnemy(typeId, x, y, tier) {
     spd: t.speed * rand(0.9, 1.1) * (tm ? tm.spd : 1),
     flip: false, animT: rand(1),
     kx: 0, ky: 0, stun: 0, flash: 0, popT: 0, bounceT: 0, dead: false,
+    burnT: 0, burnDps: 0, burnCol: null, burnTick: 0,   // yakma/zehir DoT
+    slowT: 0, slowK: 1, orbCd: 0,                        // hedefli yavaşlatma + yörünge vuruş kilidi
     wanderT: rand(TAU), shotCd: rand(1, 3), droneCd: 0,
     spawnT: t.breakable ? 0 : (t.boss ? 2.2 : 0.55),   // boss: giriş sineması bitene dek zararsız
     mopCd: 0, hasteT: 0, fuseT: -1,
@@ -1083,6 +1172,7 @@ function damageEnemy(e, dmg, kx, ky, silent) {
     Sfx.play('hit');
   }
   if (p.stunChance && Math.random() < p.stunChance) e.stun = Math.max(e.stun, 0.8);
+  if (!silent) fireCustomEvent('onhit');   // atölye: "vurunca" tetiği
   if (e.hp <= 0) killEnemy(e);
 }
 
@@ -1136,6 +1226,7 @@ function killEnemy(e) {
 
   Game.kills++;
   Sfx.play('die');
+  fireCustomEvent('onkill');   // atölye: "öldürünce" tetiği
 
   // kombo zinciri
   Game.combo++;
@@ -1256,9 +1347,25 @@ function updateEnemies(dt) {
     if (e.flash > 0) e.flash -= dt;
     if (e.droneCd > 0) e.droneCd -= dt;
     if (e.mopCd > 0) e.mopCd -= dt;
+    if (e.orbCd > 0) e.orbCd -= dt;
     if (e.hasteT > 0) e.hasteT -= dt;
     if (e.popT > 0) e.popT -= dt;
     if (e.bounceT > 0) e.bounceT -= dt;
+    if (e.slowT > 0) e.slowT -= dt;   // hedefli yavaşlatma (atölye 'chill')
+
+    // yakma/zehir: zamana yayılı hasar (atölye DoT yükleri)
+    if (e.burnT > 0) {
+      e.burnT -= dt;
+      e.burnTick -= dt;
+      if (e.burnTick <= 0) {
+        e.burnTick = 0.35;
+        damageEnemy(e, e.burnDps * 0.35, 0, 0, true);
+      }
+      if (Math.random() < 6 * dt) {
+        addPart({ x: e.x + rand(-4, 4), y: e.y - 8, vx: rand(-6, 6), vy: -rand(15, 30),
+          dur: 0.4, type: 'spark', col: e.burnCol || COL.orange });
+      }
+    }
 
     // kırılabilir nesneler hareket etmez, saldırmaz
     if (e.type.breakable) continue;
@@ -1458,7 +1565,8 @@ function updateEnemies(dt) {
         if (e.hasteT > 0) spd *= 1.45;
         if (e.enraged) spd *= 1.15;                              // boss öfkesi
         if (e.type.patron && e.hp < e.maxHp * 0.3) spd *= 1.5;   // patron çılgın fazı
-        if (Game.slowT > 0) spd *= Game.slowK;                   // ağır çekim yeteneği
+        if (Game.slowT > 0) spd *= Game.slowK;                   // global ağır çekim
+        if (e.slowT > 0) spd *= e.slowK;                         // hedefli yavaşlatma (atölye)
         if (e.type.accel) {
           // takipçi boss: yaşadıkça hızlanır (kaçış build'inin counteri)
           e.aliveT = (e.aliveT || 0) + dt;
@@ -1597,11 +1705,24 @@ function updateHazards(dt) {
     const h = Game.hazards[i];
     h.t += dt;
     if (h.t < h.warn) continue;
-    // patlama anı
-    if (dist2(h.x, h.y, p.x, p.y) < h.r * h.r) damagePlayer(h.dmg);
+    // patlama anı — ally:true ise OYUNCUNUN meteoru (düşmanlara vurur)
+    if (h.ally) {
+      for (const e of Game.enemies) {
+        if (e.dead || e.spawnT > 0) continue;
+        if (dist2(h.x, h.y, e.x, e.y) < h.r * h.r) {
+          const a = Math.atan2(e.y - h.y, e.x - h.x);
+          damageEnemy(e, h.dmg, Math.cos(a) * (h.kb || 120), Math.sin(a) * (h.kb || 120));
+          if (h.payload) applyForgePayload(h.payload, e);
+        }
+      }
+      Game.shocks.push({ x: h.x, y: h.y, r: h.r, t: 0, col: h.col || COL.orange });
+    } else if (dist2(h.x, h.y, p.x, p.y) < h.r * h.r) {
+      damagePlayer(h.dmg);
+    }
     Game.shake = Math.max(Game.shake, h.kind === 'pallet' ? 3 : 1.5);
-    Sfx.play(h.kind === 'pallet' ? 'box' : 'hit');
-    const cols = h.kind === 'pallet' ? [COL.brown, COL.brownDark, COL.skinAlt] : [COL.green, COL.greenDark, COL.gold];
+    Sfx.play(h.ally ? 'explode' : (h.kind === 'pallet' ? 'box' : 'hit'));
+    const cols = h.col ? [h.col, COL.white, COL.yellow]
+      : (h.kind === 'pallet' ? [COL.brown, COL.brownDark, COL.skinAlt] : [COL.green, COL.greenDark, COL.gold]);
     for (let k = 0; k < 8; k++) {
       addPart({ x: h.x, y: h.y - 2, vx: rand(-70, 70), vy: rand(-80, -10), dur: 0.45,
         type: 'px', col: pick(cols), size: 2 });
@@ -1839,14 +1960,15 @@ function drawPlayField(ctx) {
     const [sx, sy] = W2S(h.x, h.y);
     const k = clamp(h.t / h.warn, 0, 1);
     const blink = 0.35 + Math.sin(h.t * 18) * 0.2;
+    const hcol = h.col || (h.kind === 'pallet' ? COL.orange : COL.green);
     ctx.save();
     ctx.globalAlpha = blink;
-    ctx.strokeStyle = h.kind === 'pallet' ? COL.orange : COL.green;
+    ctx.strokeStyle = hcol;
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.ellipse(sx, sy, h.r, h.r * 0.55, 0, 0, TAU); ctx.stroke();
     // dolan iç halka: düşme anını gösterir
     ctx.globalAlpha = blink * 0.55;
-    ctx.fillStyle = h.kind === 'pallet' ? COL.orange : COL.green;
+    ctx.fillStyle = hcol;
     ctx.beginPath(); ctx.ellipse(sx, sy, h.r * k, h.r * 0.55 * k, 0, 0, TAU); ctx.fill();
     ctx.restore();
     // uçan nesne
@@ -2162,8 +2284,21 @@ function drawPlayField(ctx) {
   for (const pr of Game.projs) {
     const [sx, sy] = W2S(pr.x, pr.y);
     if (pr.type === 'staple') {
-      ctx.fillStyle = COL.greyLight; ctx.fillRect(sx - 1, sy - 1, 3, 2);
+      // atölye mermisi kendi tema rengini taşır (pr.col)
+      ctx.fillStyle = pr.col || COL.greyLight; ctx.fillRect(sx - 1, sy - 1, 3, 2);
       ctx.fillStyle = COL.white; ctx.fillRect(sx, sy - 1, 1, 1);
+    } else if (pr.type === 'orb') {
+      // atölye küresi: parlayan yuvarlak
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = 0.5;
+      ctx.fillStyle = pr.col || COL.teal;
+      ctx.beginPath(); ctx.arc(sx, sy, 4, 0, TAU); ctx.fill();
+      ctx.restore();
+      ctx.fillStyle = pr.col || COL.teal;
+      ctx.beginPath(); ctx.arc(sx, sy, 2.5, 0, TAU); ctx.fill();
+      ctx.fillStyle = COL.white;
+      ctx.fillRect(sx - 1, sy - 1, 1, 1);
     } else if (pr.type === 'kemer') {
       // dönen şampiyonluk kemeri (evrimde ALTIN KEMER: büyük ve parlak)
       ctx.save();
@@ -2248,23 +2383,42 @@ function drawPlayField(ctx) {
     ctx.restore();
   }
 
-  // seviye atlama ışık huzmeleri (varlıkların üstünde parlar)
+  // ışık huzmeleri (seviye atlama + atölye 'beam' op'u; b.rgb ile renklendirilebilir)
   for (const b of Game.beams) {
     const [sx, sy] = W2S(b.x, b.y);
     const k = 1 - b.t / 0.6;
     const w = 5 + k * 9;
+    const rgb = b.rgb || '44,232,245';
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     ctx.globalAlpha = k * 0.5;
     const g = ctx.createLinearGradient(0, sy - 130, 0, sy);
-    g.addColorStop(0, 'rgba(44,232,245,0)');
-    g.addColorStop(1, 'rgba(44,232,245,0.9)');
+    g.addColorStop(0, 'rgba(' + rgb + ',0)');
+    g.addColorStop(1, 'rgba(' + rgb + ',0.9)');
     ctx.fillStyle = g;
     ctx.fillRect(Math.round(sx - w / 2), sy - 130, Math.round(w), 130);
     ctx.globalAlpha = k * 0.8;
     ctx.fillStyle = 'rgba(244,244,248,0.8)';
     ctx.fillRect(Math.round(sx - 1), sy - 110, 2, 110);
     ctx.restore();
+  }
+
+  // atölye yörünge küreleri (oyuncunun etrafında döner)
+  for (const o of Game.orbs) {
+    const ang = o.angle + (o.i / o.n) * TAU;
+    const ox = p.x + Math.cos(ang) * o.r;
+    const oy = p.y - 6 + Math.sin(ang) * o.r * 0.7;
+    const [sx, sy] = W2S(ox, oy);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 0.45;
+    ctx.fillStyle = o.col;
+    ctx.beginPath(); ctx.arc(sx, sy, 6, 0, TAU); ctx.fill();
+    ctx.restore();
+    ctx.fillStyle = o.col;
+    ctx.beginPath(); ctx.arc(sx, sy, 3, 0, TAU); ctx.fill();
+    ctx.fillStyle = COL.white;
+    ctx.fillRect(sx - 1, sy - 2, 1, 1);
   }
 
   // hasar yazıları (büyük vuruşlar 2x altın yazı)
