@@ -13,10 +13,11 @@ const Input = {
   init(canvas) {
     window.addEventListener('keydown', e => {
       Sfx.init();
-      // isim kutusuna yazılıyorsa: sadece Enter/Escape oyuna geçsin,
-      // harfler oyun tuşu sayılmasın (R = tekrar başlat kazası olmasın)
-      const inName = e.target && e.target.id === 'nameBox';
-      if (inName) {
+      // BİR METİN KUTUSUNA yazılıyorsa (isim ya da skill atölyesi):
+      // sadece Enter/Escape oyuna geçsin; harf/boşluk oyun tuşu sayılmasın ve
+      // preventDefault YAPILMASIN — yoksa Space yutulur, kelimeler bitişik yazılır.
+      const inBox = e.target && (e.target.id === 'nameBox' || e.target.id === 'forgeBox');
+      if (inBox) {
         if (!e.repeat && ['Enter', 'NumpadEnter', 'Escape'].includes(e.code)) {
           this.pressed[e.code] = true;
         }
