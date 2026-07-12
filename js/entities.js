@@ -1698,6 +1698,74 @@ function bossRain(e) {
   Sfx.play('coin');
 }
 
+// ═══ ATÖLYE BÖLGELERİ (zone): ızgaraya çizilmiş SERBEST ŞEKİLLİ hasar alanı ═══
+// Şekil = boyanmış hücreler listesi (grid koordinatı). Dikdörtgen, duvar, artı,
+// halka, düzensiz leke — hepsi aynı primitif. Anlık ya da kalıcı (tik tik hasar),
+// sabit ya da hareketli olabilir; oyuncunun baktığı yöne döner.
+//   z = { cells:[{x,y}], cw, x, y, ang, t, dur, tick, tickRate, dmg, payload,
+//         col, part, motion:{vx,vy}|'follow', warn, hit:Set, once }
+function updateZones(dt) {
+  const p = Game.player;
+  for (let i = Game.zones.length - 1; i >= 0; i--) {
+    const z = Game.zones[i];
+    z.t += dt;
+
+    // telegraf süresi: henüz aktif değil (gökten düşen / yer hedefli)
+    if (z.warn && z.t < z.warn) continue;
+
+    // hareket
+    if (z.motion === 'follow') { z.x = p.x; z.y = p.y; }
+    else if (z.motion && z.motion.vx !== undefined) {
+      z.x += z.motion.vx * dt;
+      z.y += z.motion.vy * dt;
+    }
+
+    // hasar tik'i (anlık bölge: tek sefer; kalıcı: tickRate aralığıyla)
+    z.tick -= dt;
+    if (z.tick <= 0) {
+      z.tick = z.tickRate || 0.3;
+      const cos = Math.cos(-z.ang), sin = Math.sin(-z.ang);
+      for (const e of Game.enemies) {
+        if (e.dead || e.spawnT > 0) continue;
+        if (z.hit && z.hit.has(e.id)) continue;
+        // düşmanı bölgenin yerel ızgara koordinatına çevir
+        const dx = e.x - z.x, dy = (e.y - 4) - z.y;
+        const lx = dx * cos - dy * sin;
+        const ly = dx * sin + dy * cos;
+        const gx = Math.round(lx / z.cw), gy = Math.round(ly / z.cw);
+        if (!zoneHasCell(z, gx, gy)) continue;
+        if (z.hit) z.hit.add(e.id);
+        Game.zoneHits = (Game.zoneHits || 0) + 1;
+        const a = Math.atan2(e.y - z.y, e.x - z.x);
+        const kb = (z.payload && z.payload.kb) || 0;
+        damageEnemy(e, z.dmg, Math.cos(a) * kb, Math.sin(a) * kb, !!z.silent);
+        if (z.payload) applyForgePayload(z.payload, e);
+      }
+    }
+
+    // ambiyans parçacıkları (kalıcı bölge yanıp durur)
+    if (z.dur > 0.4 && Math.random() < 10 * dt && z.cells.length) {
+      const c = pick(z.cells);
+      const cos = Math.cos(z.ang), sin = Math.sin(z.ang);
+      const wx = z.x + (c.x * z.cw) * cos - (c.y * z.cw) * sin;
+      const wy = z.y + (c.x * z.cw) * sin + (c.y * z.cw) * cos;
+      addPart({ x: wx + rand(-3, 3), y: wy + rand(-3, 3), vx: rand(-6, 6), vy: -rand(8, 22),
+        dur: 0.5, type: z.part || 'puff', col: z.col, size: 2 });
+    }
+
+    if (z.t >= (z.warn || 0) + z.dur) Game.zones.splice(i, 1);
+  }
+}
+
+// Hücre boyalı mı? (Set ile O(1))
+function zoneHasCell(z, gx, gy) {
+  if (!z.cellSet) {
+    z.cellSet = new Set();
+    for (const c of z.cells) z.cellSet.add(c.x + ',' + c.y);
+  }
+  return z.cellSet.has(gx + ',' + gy);
+}
+
 // ── Tehlike bölgeleri (boss telegraf saldırıları) + düşman şok halkaları ──
 function updateHazards(dt) {
   const p = Game.player;
@@ -1953,6 +2021,44 @@ function drawPlayField(ctx) {
       }
     }
     ctx.restore();
+  }
+
+  // atölye bölgeleri: boyanmış hücreler (serbest şekil) — zeminde parlar
+  for (const z of Game.zones) {
+    const cos = Math.cos(z.ang), sin = Math.sin(z.ang);
+    const life = z.warn ? (z.t - z.warn) : z.t;
+    const k = z.dur > 0 ? clamp(1 - life / z.dur, 0, 1) : 1;
+    const telegraf = z.warn && z.t < z.warn;
+    const a = telegraf ? (0.25 + Math.sin(z.t * 16) * 0.15) : (0.22 + k * 0.3);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = a;
+    ctx.fillStyle = z.col;
+    for (const c of z.cells) {
+      const wx = z.x + (c.x * z.cw) * cos - (c.y * z.cw) * sin;
+      const wy = z.y + (c.x * z.cw) * sin + (c.y * z.cw) * cos;
+      const [sx, sy] = W2S(wx, wy);
+      if (sx < -30 || sx > 510 || sy < -30 || sy > 300) continue;
+      ctx.fillRect(Math.round(sx - z.cw / 2), Math.round(sy - z.cw * 0.35),
+        Math.round(z.cw), Math.round(z.cw * 0.7));
+    }
+    ctx.restore();
+    // telegraf: dolan kenarlık (ne zaman patlayacağını gösterir)
+    if (telegraf) {
+      ctx.save();
+      ctx.globalAlpha = 0.6;
+      ctx.strokeStyle = z.col; ctx.lineWidth = 1;
+      const kk = clamp(z.t / z.warn, 0, 1);
+      for (const c of z.cells) {
+        const wx = z.x + (c.x * z.cw) * cos - (c.y * z.cw) * sin;
+        const wy = z.y + (c.x * z.cw) * sin + (c.y * z.cw) * cos;
+        const [sx, sy] = W2S(wx, wy);
+        const w2 = z.cw * kk;
+        ctx.strokeRect(Math.round(sx - w2 / 2) + 0.5, Math.round(sy - w2 * 0.35) + 0.5,
+          Math.round(w2), Math.round(w2 * 0.7));
+      }
+      ctx.restore();
+    }
   }
 
   // tehlike bölgeleri: yanıp sönen telegraf + havada uçan palet/banknot

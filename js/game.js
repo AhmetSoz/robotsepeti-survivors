@@ -25,6 +25,7 @@ const Game = {
   slowT: 0, slowK: 1, decoy: null,
   hazards: [], eRings: [], afterimgs: [], beams: [], ambients: [],
   orbs: [], forgeQueue: [], forgeFiring: false,   // atölye: küreler + kuyruk + rekürsiyon kilidi
+  zones: [],   // atölye: ızgaraya çizilmiş serbest şekilli hasar bölgeleri
   bossIntro: null, curZone: 'depo', roombaT: 6, sparkT: 12,
   ringT: 20, bossChestT: 0, bossChestQ: 0, t2Seen: false, t3Seen: false,
   spawnAcc: 0, eliteT: 60, hordeT: 120, bossIdx: 0, bossAlive: false, hordeN: 0,
@@ -86,7 +87,7 @@ const Game = {
     this.pickups = []; this.parts = []; this.floats = [];
     this.projs = []; this.corpses = []; this.decals = [];
     this.hazards = []; this.eRings = []; this.afterimgs = []; this.beams = []; this.ambients = [];
-    this.orbs = []; this.forgeQueue = [];
+    this.orbs = []; this.forgeQueue = []; this.zones = [];
     this.bossIntro = null; this.curZone = 'depo'; this.roombaT = 6; this.sparkT = 12;
     this.ringT = 20; this.bossChestT = 0; this.bossChestQ = 0; this.t2Seen = false; this.t3Seen = false;
     this.spawnAcc = 0; this.hordeT = 120; this.bossIdx = 0; this.bossAlive = false; this.hordeN = 0;
@@ -191,6 +192,7 @@ const Game = {
     updateEnemies(dt);
     updatePickups(dt);
     updateHazards(dt);
+    updateZones(dt);   // atölye: serbest şekilli bölgeler
     sweepDead();   // bu karede ölenler tek seferde temizlenir (splice-atlama düzeltmesi)
     updateFx(dt);
     this.director(dt);

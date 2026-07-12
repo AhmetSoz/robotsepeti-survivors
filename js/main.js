@@ -187,6 +187,15 @@
         throw e;
       }
       if (dbg) document.title = 'DEBUG ' + JSON.stringify(dbg);
+      // probe: atölye testi — yetenek gerçekten iş yaptı mı? (zone vuruşu / öldürme)
+      if (params.get('probe')) {
+        document.title = 'PROBE ' + JSON.stringify({
+          zoneHits: Game.zoneHits || 0,
+          zonesAlive: Game.zones.length,
+          kills: Game.kills,
+          enemies: Game.enemies.length
+        });
+      }
       // ekran görüntüsü testi: yeteneği hemen kullan
       if (params.get('useskill') && Game.state === 'play') {
         Game.player.skill.cd = 0;

@@ -24,7 +24,21 @@ const THEMES = {
 // ═══════════════ KELİME SÖZLÜĞÜ ═══════════════
 // Her op ve tema için eşanlamlı kelime öbekleri. Genişledikçe "anlıyor" hissi artar.
 const ATOM_WORDS = {
-  // ── şekiller / alan ──
+  // ── SERBEST ŞEKİLLER (ızgara hücreleriyle inşa edilir; elle de düzenlenebilir) ──
+  s_rect:   ['dikdortgen', 'kare', 'blok', 'kutu seklinde', 'dortgen'],
+  s_line:   ['cizgi', 'seritte', 'serit', 'ince uzun', 'lazer'],
+  s_wall:   ['duvar', 'bariyer', 'set', 'perde'],
+  s_cross:  ['arti', 'haci', 'arti seklinde'],
+  s_x:      ['carpi', 'x seklinde', 'capraz'],
+  s_ring:   ['cember', 'yuzuk', 'halka seklinde'],
+  s_circle: ['daire', 'yuvarlak', 'top seklinde'],
+  // ── yerleşim / kalıcılık ──
+  ground:   ['yerde', 'zeminde', 'yere', 'kalici', 'kalsin', 'birak', 'kalacak', 'duracak'],
+  atenemy:  ['dusmanin uzerine', 'hedefin uzerine', 'onlarin uzerine'],
+  fromsky:  ['gokten', 'gokyuzunden', 'yukaridan', 'tepeden'],
+  moving:   ['ilerlesin', 'gitsin', 'yol alsin', 'kaysin', 'suzulsun'],
+  follow:   ['pesimden', 'benimle', 'takip etsin', 'yanimda'],
+  // ── şekiller / alan (hazır kalıplar) ──
   nova:    ['patlama', 'patlat', 'patla', 'etraf', 'cevre', 'cevremde', 'nova', 'sarsinti', 'infilak'],
   wave:    ['halka', 'dalga', 'yay', 'yayil', 'genisleyen', 'sok dalgasi'],
   cone:    ['koni', 'one', 'onume', 'huni', 'yelpaze', 'onumdeki', 'ondeki'],
@@ -78,6 +92,98 @@ const ATOM_WORDS = {
   lowhp:   ['canim azalinca', 'can azalinca', 'olmek uzereyken', 'az kalinca', 'tehlikede'],
   onkill:  ['oldurunce', 'oldurdugumde', 'devirince', 'olduren']
 };
+
+// ═══════════════ ŞEKİL ÜRETEÇLERİ (atomik hücrelerden herhangi bir şekil) ═══════════════
+// Yeteneğin vuruş alanı = ızgaraya boyanmış HÜCRELER. Dikdörtgen = yan yana kareler,
+// duvar = uzun ince dizi, artı = iki dikdörtgen, halka = kabuk... Hepsi aynı primitif.
+// Oyuncu bunları elle de boyayıp değiştirebilir (şekil editörü).
+const ZONE_CELL = 9;          // bir hücre = 9 dünya pikseli
+const SHAPE_MAX = 7;          // ızgara yarıçapı (15x15 hücre = 135x135 px)
+
+const SHAPES = {
+  // kare/dikdörtgen: w×h hücre, oyuncunun ÖNÜNE doğru uzanır
+  rect(w, h) {
+    const cells = [];
+    w = forgeClamp(Math.round(w), 1, 13); h = forgeClamp(Math.round(h), 1, 13);
+    for (let x = 0; x < w; x++) {
+      for (let y = 0; y < h; y++) {
+        cells.push({ x: x + 1, y: y - ((h - 1) / 2 | 0) });   // önden başlar
+      }
+    }
+    return cells;
+  },
+  // daire: r yarıçapında dolu hücre kümesi (oyuncu merkezli)
+  circle(r) {
+    const cells = [];
+    r = forgeClamp(Math.round(r), 1, SHAPE_MAX);
+    for (let x = -r; x <= r; x++)
+      for (let y = -r; y <= r; y++)
+        if (x * x + y * y <= r * r) cells.push({ x, y });
+    return cells;
+  },
+  // halka: sadece kabuk
+  ring(r) {
+    const cells = [];
+    r = forgeClamp(Math.round(r), 2, SHAPE_MAX);
+    for (let x = -r; x <= r; x++)
+      for (let y = -r; y <= r; y++) {
+        const d = x * x + y * y;
+        if (d <= r * r && d >= (r - 1.2) * (r - 1.2)) cells.push({ x, y });
+      }
+    return cells;
+  },
+  // çizgi/duvar: uzunluk × kalınlık, öne doğru
+  line(len, th) {
+    return SHAPES.rect(len, th || 1);
+  },
+  // dik duvar: öne uzak, yana geniş
+  wall(len, dist) {
+    const cells = [];
+    len = forgeClamp(Math.round(len), 2, 13);
+    const d = forgeClamp(Math.round(dist || 3), 1, SHAPE_MAX);
+    for (let y = -(len >> 1); y <= (len >> 1); y++) cells.push({ x: d, y });
+    return cells;
+  },
+  // koni: öne doğru genişleyen
+  cone(range, arc) {
+    const cells = [];
+    range = forgeClamp(Math.round(range), 2, SHAPE_MAX);
+    const half = (arc || 0.9) / 2;
+    for (let x = 1; x <= range; x++)
+      for (let y = -range; y <= range; y++) {
+        const ang = Math.atan2(y, x);
+        if (Math.abs(ang) <= half && x * x + y * y <= range * range) cells.push({ x, y });
+      }
+    return cells;
+  },
+  // artı / çarpı
+  cross(len) {
+    const cells = [];
+    len = forgeClamp(Math.round(len), 1, SHAPE_MAX);
+    for (let i = -len; i <= len; i++) { cells.push({ x: i, y: 0 }); cells.push({ x: 0, y: i }); }
+    return cells;
+  },
+  x(len) {
+    const cells = [];
+    len = forgeClamp(Math.round(len), 1, SHAPE_MAX);
+    for (let i = -len; i <= len; i++) { cells.push({ x: i, y: i }); cells.push({ x: i, y: -i }); }
+    return cells;
+  },
+  // tek nokta
+  dot() { return [{ x: 0, y: 0 }]; }
+};
+
+// Hücre listesini benzersizleştir (üst üste binmesin)
+function dedupeCells(cells) {
+  const seen = new Set(), out = [];
+  for (const c of cells) {
+    const k = c.x + ',' + c.y;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    if (Math.abs(c.x) <= 13 && Math.abs(c.y) <= 13) out.push({ x: c.x, y: c.y });
+  }
+  return out;
+}
 
 // Türkçe karakterleri sadeleştir (eşleşme kolaylığı)
 function forgeNorm(s) {
@@ -164,6 +270,40 @@ function parseAbility(text) {
   const addShapeOps = seg => {
     const h = key => segHas(seg, key);
     let added = false;
+
+    // ══ SERBEST ŞEKİL (zone): hücrelerden inşa edilir — "2 kareyi yan yana koy = dikdörtgen" ══
+    // Sıra en spesifikten en gevşeğe: 'lazer'/'kare' gibi gevşek kelimeler sonda kalsın.
+    let cells = null;
+    const sz = forgeClamp(Math.round(3 * mag), 1, 7);
+    if (h('s_cross')) cells = SHAPES.cross(sz);
+    else if (h('s_x')) cells = SHAPES.x(sz);
+    else if (h('s_ring')) cells = SHAPES.ring(sz + 1);
+    else if (h('s_circle')) cells = SHAPES.circle(sz);
+    else if (h('s_wall')) cells = SHAPES.wall(countHint || Math.round(7 * mag), 3);
+    else if (h('s_rect')) cells = SHAPES.rect(countHint || Math.round(4 * mag), Math.max(2, Math.round(2 * mag)));
+    else if (h('s_line')) cells = SHAPES.line(countHint || Math.round(6 * mag), 1);
+
+    if (cells) {
+      // Yerleşim/kalıcılık nitelikleri AYRI bir cümlecikte yazılmış olabilir
+      // ("dikdörtgen ateş at, BİR SÜRE YERDE KALIP yaksın") → tüm metinden bak.
+      const ground = has('ground');
+      const sky = has('fromsky');
+      const move = has('moving');
+      const foll = has('follow');
+      ops.push({
+        op: 'zone',
+        cells: dedupeCells(cells),
+        dmg: D(ground ? 0.45 : 1.1),          // kalıcı bölge tik başına daha az vurur
+        dur: ground ? forgeClamp(5 * mag, 1, 12) : 0.35,
+        tickRate: ground ? 0.4 : 0,           // 0 = tek sefer (anlık vuruş)
+        place: sky ? 'sky' : (has('atenemy') ? 'enemy' : 'self'),
+        motion: foll ? 'follow' : (move ? 'forward' : null),
+        warn: sky ? 0.7 : 0
+      });
+      // Şekil bu cümleciğin ana fikri — ayrıca mermi/koni/patlama EKLEME.
+      return true;
+    }
+
     // hareket önce (öncelikli)
     if (h('dash')) { ops.push({ op: 'dash', range: forgeClamp(75 * mag, 40, 200), dmg: D(1.2) }); added = true; }
     if (h('blink')) { ops.push({ op: 'blink', range: forgeClamp(90 * mag, 40, 200) }); added = true; }
@@ -207,7 +347,7 @@ function parseAbility(text) {
 
   // ── isim ──
   const opName = ops.length ? ({
-    nova: 'PATLAMA', wave: 'DALGA', cone: 'KONİ', proj: 'ATIŞ', spiral: 'SAÇILIM',
+    zone: 'ŞEKİL', nova: 'PATLAMA', wave: 'DALGA', cone: 'KONİ', proj: 'ATIŞ', spiral: 'SAÇILIM',
     homing: 'GÜDÜM', boomerang: 'BUMERANG', meteor: 'YAĞMUR', car: 'EZİCİ', cloud: 'BULUT',
     orbit: 'YÖRÜNGE', dash: 'HAMLE', blink: 'SIÇRAMA', decoy: 'KLON', shield: 'KALKAN',
     heal: 'ŞİFA', haste: 'HIZ', rage: 'ÖFKE', slowmo: 'ZAMAN', invuln: 'ZIRH', magnet: 'ÇEKİM'
@@ -232,6 +372,7 @@ function parseAbility(text) {
 
 // İnsan-okunur op zinciri ("1. İLERİ ATIL → 2. BUZ HALKASI")
 const OP_LABEL = {
+  zone: 'ÇİZİLMİŞ ŞEKİL',
   nova: 'PATLAMA', wave: 'YAYILAN HALKA', cone: 'ÖNE KONİ', proj: 'MERMİ', spiral: 'HER YÖNE SAÇILIM',
   homing: 'GÜDÜMLÜ', boomerang: 'BUMERANG', meteor: 'GÖKTEN YAĞMUR', car: 'ARAÇ EZMESİ',
   cloud: 'KALICI BULUT', orbit: 'DÖNEN KÜRE', dash: 'İLERİ ATILIŞ', blink: 'IŞINLANMA',
@@ -271,6 +412,40 @@ function runOp(o, spec, p, TH, col) {
   const D = (o.dmg || 0) * p.might * dmgMul;
 
   switch (o.op) {
+    // ══ SERBEST ŞEKİLLİ BÖLGE: oyuncunun çizdiği/tarif ettiği hücre deseni ══
+    case 'zone': {
+      const cells = o.cells && o.cells.length ? o.cells : [{ x: 0, y: 0 }];
+      const ang = facingAngle(p);
+      let zx = p.x, zy = p.y;
+      if (o.place === 'enemy' || o.place === 'sky') {
+        // en yakın düşmanın üstüne kur
+        let best = null, bd = 220 * 220;
+        for (const e of Game.enemies) {
+          if (e.dead || e.spawnT > 0) continue;
+          const d = dist2(p.x, p.y, e.x, e.y);
+          if (d < bd) { bd = d; best = e; }
+        }
+        if (best) { zx = best.x; zy = best.y; }
+        else { zx = p.x + Math.cos(ang) * 60; zy = p.y + Math.sin(ang) * 60; }
+      }
+      const persistent = (o.tickRate || 0) > 0;
+      const mv = o.motion === 'forward'
+        ? { vx: Math.cos(ang) * 90, vy: Math.sin(ang) * 90 }
+        : (o.motion === 'follow' ? 'follow' : null);
+      Game.zones.push({
+        cells, cw: ZONE_CELL, cellSet: null,
+        x: zx, y: zy, ang: (o.place === 'self' ? ang : 0),
+        t: 0, dur: o.dur || 0.35,
+        tick: 0, tickRate: o.tickRate || 0.3,
+        dmg: D,
+        payload: pay, col, part: TH.part,
+        motion: mv, warn: o.warn || 0,
+        hit: persistent ? null : new Set(),   // anlık: her düşmana bir kez
+        silent: persistent
+      });
+      Game.shake = Math.max(Game.shake, persistent ? 1.5 : 3);
+      break;
+    }
     // ── ŞEKİL: anlık halka patlaması ──
     case 'nova': {
       Game.shocks.push({ x: p.x, y: p.y - 6, r: o.r, t: 0, col });
