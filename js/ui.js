@@ -88,7 +88,10 @@ const UI = {
 
   // ── SKİLL ATÖLYESİ v2 (kütüphane + editör) ──
   forgeBox() { return document.getElementById('forgeBox'); },
-  forgeView: 'lib',   // 'lib' (kütüphane) | 'edit' (yazma ekranı)
+  forgeView: 'lib',   // 'lib' (kütüphane) | 'edit' (yazma) | 'shape' (ızgarada çizme)
+  // ── ızgara şekil editörü geometrisi (25x15 hücre) ──
+  gw: 9, gx: 12, gy: 7, gl: 128, gt: 64,
+  paintMode: null,    // sürüklerken 'add' | 'erase'
 
   showForgeBox(on) {
     const fb = this.forgeBox();
@@ -105,31 +108,70 @@ const UI = {
     }
   },
 
+  // metni yeniden çözümle ama oyuncunun EL ÇİZİMİNİ koru
+  reparse() {
+    const hand = Forge.draft && Forge.draft.handCells;
+    Forge.draft = parseAbility(Forge.input || '');
+    if (hand && hand.length) {
+      Forge.draft.handCells = hand;
+      applyHandCells(Forge.draft);
+    }
+  },
+
+  // ekran noktası → ızgara hücresi (dışarıdaysa null)
+  cellAt(mx, my) {
+    const cols = this.gx * 2 + 1, rows = this.gy * 2 + 1;
+    if (mx < this.gl || my < this.gt) return null;
+    if (mx >= this.gl + cols * this.gw || my >= this.gt + rows * this.gw) return null;
+    return {
+      x: ((mx - this.gl) / this.gw | 0) - this.gx,
+      y: ((my - this.gt) / this.gw | 0) - this.gy
+    };
+  },
+
   updateForge() {
     this.showForgeBox(this.forgeView === 'edit');
 
     if (Input.back() || this.backHit()) {
+      if (this.forgeView === 'shape') { this.forgeView = 'edit'; Sfx.play('click'); return; }
       if (this.forgeView === 'edit') { this.forgeView = 'lib'; Sfx.play('click'); return; }
       this.showForgeBox(false);
       Game.state = 'title'; Game.menuIdx = 0; Sfx.play('click'); return;
     }
+
+    // ══ İZGARA ŞEKİL EDİTÖRÜ ══
+    if (this.forgeView === 'shape') { this.updateForgeShape(); return; }
 
     // ══ EDİTÖR ══
     if (this.forgeView === 'edit') {
       const fb = this.forgeBox();
       if (Input.mouse.clicked && Input.mouseIn(30, 54, 420, 44) && fb && Input.touchMode) fb.focus();
       // ANLA
-      if (Input.mouse.clicked && Input.mouseIn(30, 106, 130, 20)) {
-        Forge.draft = parseAbility(Forge.input || '');
+      if (Input.mouse.clicked && Input.mouseIn(30, 106, 98, 20)) {
+        this.reparse();
         Sfx.play('select');
       }
+      // ŞEKİL ÇİZ → ızgaraya geç (yazıdan çıkan şekil hazır gelir)
+      if (Input.mouse.clicked && Input.mouseIn(134, 106, 98, 20)) {
+        if (!Forge.draft) this.reparse();
+        const d = Forge.draft;
+        if (d) {
+          if (!d.handCells) {
+            const z = specZoneOp(d);
+            d.handCells = z ? z.cells.map(c => ({ x: c.x, y: c.y })) : [];
+          }
+          this.showForgeBox(false);
+          this.forgeView = 'shape'; Sfx.play('select');
+        }
+        return;
+      }
       // KAYDET (kütüphaneye ekle / üstüne yaz)
-      if (Forge.draft && !Forge.draft.unknown && Input.mouse.clicked && Input.mouseIn(175, 106, 130, 20)) {
+      if (Forge.draft && !Forge.draft.unknown && Input.mouse.clicked && Input.mouseIn(238, 106, 98, 20)) {
         if (Forge.commit()) { this.forgeView = 'lib'; Sfx.play('chest'); }
         return;
       }
       // KAYDET + TEST
-      if (Forge.draft && !Forge.draft.unknown && Input.mouse.clicked && Input.mouseIn(320, 106, 130, 20)) {
+      if (Forge.draft && !Forge.draft.unknown && Input.mouse.clicked && Input.mouseIn(342, 106, 108, 20)) {
         if (Forge.commit()) {
           this.showForgeBox(false);
           if (Input.touchMode) goFullscreen();
@@ -177,11 +219,143 @@ const UI = {
     }
   },
 
+  // ══ İZGARA ŞEKİL EDİTÖRÜ: hücre hücre boya — 2 kare yan yana = dikdörtgen ══
+  updateForgeShape() {
+    const d = Forge.draft;
+    if (!d) { this.forgeView = 'edit'; return; }
+    if (!d.handCells) d.handCells = [];
+
+    // fırça: basılı tutup sürükle. İlk dokunulan hücre modu belirler (ekle/sil).
+    if (Input.mouse.down) {
+      const c = this.cellAt(Input.mouse.x, Input.mouse.y);
+      if (c) {
+        const idx = d.handCells.findIndex(k => k.x === c.x && k.y === c.y);
+        if (!this.paintMode) this.paintMode = idx >= 0 ? 'erase' : 'add';
+        if (this.paintMode === 'add' && idx < 0) {
+          d.handCells.push({ x: c.x, y: c.y });
+          applyHandCells(d); Sfx.play('click');
+        } else if (this.paintMode === 'erase' && idx >= 0) {
+          d.handCells.splice(idx, 1);
+          if (d.handCells.length) applyHandCells(d);
+          Sfx.play('click');
+        }
+      }
+    } else this.paintMode = null;
+
+    if (!Input.mouse.clicked) return;
+    // TEMİZLE
+    if (Input.mouseIn(30, 212, 96, 20)) {
+      d.handCells = [];
+      const z = specZoneOp(d);
+      if (z) z.cells = [{ x: 0, y: 0 }];
+      Sfx.play('hurt'); return;
+    }
+    // YAZIDAN AL (çizimi at, cümlenin ürettiği şekle dön)
+    if (Input.mouseIn(132, 212, 108, 20)) {
+      const fresh = parseAbility(Forge.input || '');
+      const z = specZoneOp(fresh);
+      d.handCells = z ? z.cells.map(c => ({ x: c.x, y: c.y })) : [];
+      applyHandCells(d);
+      Sfx.play('select'); return;
+    }
+    // AYNALA (üst yarıyı alta kopyala → simetrik şekil)
+    if (Input.mouseIn(246, 212, 96, 20)) {
+      const add = [];
+      for (const c of d.handCells) if (c.y !== 0) add.push({ x: c.x, y: -c.y });
+      d.handCells = dedupeCells(d.handCells.concat(add));
+      applyHandCells(d); Sfx.play('select'); return;
+    }
+    // TAMAM
+    if (Input.mouseIn(348, 212, 102, 20)) {
+      applyHandCells(d);
+      this.forgeView = 'edit'; Sfx.play('chest'); return;
+    }
+  },
+
+  drawForgeShape(ctx) {
+    const d = Forge.draft;
+    const TH = THEMES[(d && d.theme) || 'sade'] || THEMES.sade;
+    const tcol = COL[TH.col] || COL.white;
+    const cells = (d && d.handCells) || [];
+    const cols = this.gx * 2 + 1, rows = this.gy * 2 + 1;
+    const W = cols * this.gw, H = rows * this.gw;
+
+    drawText(ctx, 'ŞEKLİ ÇİZ', 240, 4, tcol, { align: 'center', scale: 2, shadow: COL.outline });
+    drawText(ctx, 'YAN YANA 2 KARE = DİKDÖRTGEN. SÜRÜKLE: ÇİZ · DOLU HÜCREYE BAS: SİL',
+      240, 24, COL.greyLight, { align: 'center' });
+    drawText(ctx, 'YAZI NE YAPACAĞINI SÖYLER — ÇİZİM NEREYE VURACAĞINI',
+      240, 36, COL.navy, { align: 'center' });
+    drawText(ctx, 'BEĞENMEZSEN "YAZIDAN AL" İLE CÜMLENİN ŞEKLİNE DÖN',
+      240, 48, COL.navyDark, { align: 'center' });
+
+    // ızgara zemini
+    ctx.fillStyle = '#12142b';
+    ctx.fillRect(this.gl, this.gt, W, H);
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 0; i <= cols; i++) { ctx.moveTo(this.gl + i * this.gw + 0.5, this.gt); ctx.lineTo(this.gl + i * this.gw + 0.5, this.gt + H); }
+    for (let j = 0; j <= rows; j++) { ctx.moveTo(this.gl, this.gt + j * this.gw + 0.5); ctx.lineTo(this.gl + W, this.gt + j * this.gw + 0.5); }
+    ctx.stroke();
+
+    // boyalı hücreler
+    const pulse = 0.72 + Math.sin(Game.uiT * 5) * 0.12;
+    for (const c of cells) {
+      const sx = this.gl + (c.x + this.gx) * this.gw;
+      const sy = this.gt + (c.y + this.gy) * this.gw;
+      ctx.globalAlpha = pulse;
+      ctx.fillStyle = tcol;
+      ctx.fillRect(sx + 1, sy + 1, this.gw - 1, this.gw - 1);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = 'rgba(255,255,255,0.30)';
+      ctx.fillRect(sx + 1, sy + 1, this.gw - 1, 1);
+    }
+
+    // oyuncu (0,0) ve bakış yönü
+    const px = this.gl + this.gx * this.gw, py = this.gt + this.gy * this.gw;
+    ctx.strokeStyle = COL.white;
+    ctx.strokeRect(px + 0.5, py + 0.5, this.gw - 1, this.gw - 1);
+    ctx.fillStyle = COL.white;
+    ctx.fillRect(px + 3, py + 3, 3, 3);
+    drawText(ctx, 'SEN', this.gl - 4, py + 2, COL.white, { align: 'right' });
+    drawText(ctx, 'BAKIŞ >', this.gl + W + 4, py + 2, COL.yellow);
+
+    // imleç önizlemesi
+    const hov = this.cellAt(Input.mouse.x, Input.mouse.y);
+    if (hov) {
+      ctx.strokeStyle = COL.yellow;
+      ctx.strokeRect(this.gl + (hov.x + this.gx) * this.gw + 0.5, this.gt + (hov.y + this.gy) * this.gw + 0.5,
+        this.gw - 1, this.gw - 1);
+    }
+
+    // bilgi: kaç hücre, kaç piksel
+    let minx = 99, maxx = -99, miny = 99, maxy = -99;
+    for (const c of cells) {
+      minx = Math.min(minx, c.x); maxx = Math.max(maxx, c.x);
+      miny = Math.min(miny, c.y); maxy = Math.max(maxy, c.y);
+    }
+    const info = cells.length
+      ? cells.length + ' HÜCRE · ' + ((maxx - minx + 1) * ZONE_CELL) + 'x' + ((maxy - miny + 1) * ZONE_CELL) + ' PİKSEL'
+      : 'BOŞ — HİÇBİR YERE VURMAZ';
+    drawText(ctx, info, 240, this.gt + H + 3, cells.length ? COL.grey : COL.redDark, { align: 'center' });
+
+    this.panel(ctx, 30, 212, 96, 20, COL.red);
+    drawText(ctx, 'TEMİZLE', 78, 218, COL.red, { align: 'center' });
+    this.panel(ctx, 132, 212, 108, 20, COL.yellow);
+    drawText(ctx, 'YAZIDAN AL', 186, 218, COL.yellow, { align: 'center' });
+    this.panel(ctx, 246, 212, 96, 20, COL.teal);
+    drawText(ctx, 'AYNALA', 294, 218, COL.teal, { align: 'center' });
+    this.panel(ctx, 348, 212, 102, 20, COL.green);
+    drawText(ctx, 'TAMAM', 399, 218, COL.green, { align: 'center', shadow: COL.outline });
+    drawText(ctx, 'ESC: GERİ DÖN', 240, 240, COL.greyDark, { align: 'center' });
+  },
+
   drawForge(ctx) {
     World.drawFloor(ctx, 777, 333, Game.uiT);
     this.dim(ctx, 0.8);
     this.backBtn(ctx);
 
+    if (this.forgeView === 'shape') { this.drawForgeShape(ctx); return; }
     if (this.forgeView === 'edit') { this.drawForgeEditor(ctx); return; }
 
     // ══ KÜTÜPHANE ══
@@ -244,47 +418,73 @@ const UI = {
     }
 
     // butonlar
-    this.panel(ctx, 30, 106, 130, 20, COL.yellow);
-    drawText(ctx, 'ANLA', 95, 112, COL.yellow, { align: 'center', shadow: COL.outline });
     const spec = Forge.draft;
     const ok = spec && !spec.unknown;
-    this.panel(ctx, 175, 106, 130, 20, ok ? COL.teal : COL.navy);
-    drawText(ctx, 'KAYDET', 240, 112, ok ? COL.teal : COL.navyDark, { align: 'center', shadow: COL.outline });
-    this.panel(ctx, 320, 106, 130, 20, ok ? COL.green : COL.navy);
-    drawText(ctx, 'KAYDET + TEST', 385, 112, ok ? COL.green : COL.navyDark, { align: 'center', shadow: COL.outline });
+    this.panel(ctx, 30, 106, 98, 20, COL.yellow);
+    drawText(ctx, 'ANLA', 79, 112, COL.yellow, { align: 'center', shadow: COL.outline });
+    this.panel(ctx, 134, 106, 98, 20, COL.orange);
+    drawText(ctx, 'ŞEKİL ÇİZ', 183, 112, COL.orange, { align: 'center', shadow: COL.outline });
+    this.panel(ctx, 238, 106, 98, 20, ok ? COL.teal : COL.navy);
+    drawText(ctx, 'KAYDET', 287, 112, ok ? COL.teal : COL.navyDark, { align: 'center', shadow: COL.outline });
+    this.panel(ctx, 342, 106, 108, 20, ok ? COL.green : COL.navy);
+    drawText(ctx, 'KAYDET+TEST', 396, 112, ok ? COL.green : COL.navyDark, { align: 'center', shadow: COL.outline });
 
     // çözümleme
     if (!spec) {
-      drawText(ctx, 'YAZ VE "ANLA"YA BAS.', 240, 150, COL.greyDark, { align: 'center' });
-      drawText(ctx, 'KELİMELER: ateş buz zehir şok kutsal karanlık kan rüzgar · koni halka patlama',
-        240, 176, COL.navy, { align: 'center' });
-      drawText(ctx, 'mermi güdümlü bumerang meteor araç bulut yörünge atıl ışınlan sahte',
-        240, 188, COL.navy, { align: 'center' });
+      drawText(ctx, 'YAZ VE "ANLA"YA BAS — YA DA DOĞRUDAN "ŞEKİL ÇİZ".', 240, 148, COL.greyDark, { align: 'center' });
+      drawText(ctx, 'ŞEKİL: dikdörtgen kare çizgi duvar artı çarpı çember daire · yerde kalsın gökten',
+        240, 170, COL.navy, { align: 'center' });
+      drawText(ctx, 'TEMA: ateş buz zehir şok kutsal karanlık kan rüzgar · koni halka patlama mermi',
+        240, 182, COL.navy, { align: 'center' });
+      drawText(ctx, 'güdümlü bumerang meteor araç bulut yörünge atıl ışınlan sahte · peşimden ilerlesin',
+        240, 194, COL.navy, { align: 'center' });
       drawText(ctx, 'dondur yavaşlat yak zehirle savur çek kalkan iyileş öfkelen · otomatik vurunca',
-        240, 200, COL.navy, { align: 'center' });
+        240, 206, COL.navy, { align: 'center' });
       return;
     }
     if (spec.unknown) {
-      drawText(ctx, 'ANLAYAMADIM — YUKARIDAKİ KELİMELERDEN KULLAN.', 240, 150, COL.orange, { align: 'center' });
+      drawText(ctx, 'ANLAYAMADIM — YUKARIDAKİ KELİMELERDEN KULLAN,', 240, 150, COL.orange, { align: 'center' });
+      drawText(ctx, 'YA DA "ŞEKİL ÇİZ" İLE ELLE ÇİZ.', 240, 164, COL.orange, { align: 'center' });
       return;
     }
     const tcol = COL[(THEMES[spec.theme] || THEMES.sade).col] || COL.white;
-    this.panel(ctx, 30, 134, 420, 88, tcol);
-    drawText(ctx, spec.name, 240, 139, COL.yellow, { align: 'center', shadow: COL.outline });
+    this.panel(ctx, 30, 134, 300, 88, tcol);
+    drawText(ctx, spec.name, 180, 139, COL.yellow, { align: 'center', shadow: COL.outline });
     // op zinciri (satır satır, çakışmasın)
     let cy = 152;
-    for (const ln of wrapText(specChain(spec), 58).slice(0, 2)) {
-      drawText(ctx, ln, 240, cy, tcol, { align: 'center' });
+    for (const ln of wrapText(specChain(spec), 40).slice(0, 2)) {
+      drawText(ctx, ln, 180, cy, tcol, { align: 'center' });
       cy += 11;
     }
-    for (const ln of wrapText(specSummary(spec), 60).slice(0, 2)) {
-      drawText(ctx, ln, 240, cy, COL.greyLight, { align: 'center' });
+    for (const ln of wrapText(specSummary(spec), 42).slice(0, 2)) {
+      drawText(ctx, ln, 180, cy, COL.greyLight, { align: 'center' });
       cy += 11;
     }
-    drawText(ctx, 'ANLADIM: ' + spec.matched.join(', ').slice(0, 56), 240, cy, COL.grey, { align: 'center' });
+    drawText(ctx, 'ANLADIM: ' + spec.matched.map(atomLabel).join(', ').slice(0, 38), 180, cy, COL.grey,
+      { align: 'center' });
     cy += 10;
     if (spec.ignored && spec.ignored.length) {
-      drawText(ctx, 'ANLAMADIM: ' + spec.ignored.join(', ').slice(0, 50), 240, cy, COL.redDark, { align: 'center' });
+      drawText(ctx, 'ANLAMADIM: ' + spec.ignored.join(', ').slice(0, 34), 180, cy, COL.redDark, { align: 'center' });
+    }
+
+    // ── mini şekil önizlemesi (vuruş alanı) ──
+    this.panel(ctx, 336, 134, 114, 88, COL.navy);
+    const z = specZoneOp(spec);
+    if (z && z.cells && z.cells.length) {
+      drawText(ctx, spec.handCells ? 'ÇİZDİĞİN ŞEKİL' : 'VURUŞ ALANI', 393, 139, COL.greyLight, { align: 'center' });
+      const s = 4;                                  // önizlemede 1 hücre = 4px
+      const cx0 = 380, cy0 = 178;                   // oyuncu merkezi (şekil öne uzadığı için solda)
+      ctx.fillStyle = tcol;
+      for (const c of z.cells) {
+        ctx.fillRect(cx0 + c.x * s, cy0 + c.y * s, s - 1, s - 1);
+      }
+      ctx.fillStyle = COL.white;
+      ctx.fillRect(cx0, cy0, 2, 2);                 // oyuncu
+      drawText(ctx, z.tickRate ? Math.round(z.dur) + ' SN YERDE' : 'ANLIK', 393, 210, COL.grey, { align: 'center' });
+    } else {
+      drawText(ctx, 'ŞEKİL YOK', 393, 168, COL.greyDark, { align: 'center' });
+      drawText(ctx, '"ŞEKİL ÇİZ"E', 393, 182, COL.navy, { align: 'center' });
+      drawText(ctx, 'BASIP ÇİZ', 393, 192, COL.navy, { align: 'center' });
     }
     drawText(ctx, 'ESC: KÜTÜPHANEYE DÖN', 240, 250, COL.greyDark, { align: 'center' });
   },

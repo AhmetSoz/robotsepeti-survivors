@@ -33,7 +33,8 @@ const ATOM_WORDS = {
   s_ring:   ['cember', 'yuzuk', 'halka seklinde'],
   s_circle: ['daire', 'yuvarlak', 'top seklinde'],
   // ── yerleşim / kalıcılık ──
-  ground:   ['yerde', 'zeminde', 'yere', 'kalici', 'kalsin', 'birak', 'kalacak', 'duracak'],
+  ground:   ['yerde', 'zeminde', 'yere', 'kalici', 'kalsin', 'kalip', 'kalarak', 'birak',
+             'kalacak', 'duracak', 'yanmaya devam'],
   atenemy:  ['dusmanin uzerine', 'hedefin uzerine', 'onlarin uzerine'],
   fromsky:  ['gokten', 'gokyuzunden', 'yukaridan', 'tepeden'],
   moving:   ['ilerlesin', 'gitsin', 'yol alsin', 'kaysin', 'suzulsun'],
@@ -98,13 +99,16 @@ const ATOM_WORDS = {
 // duvar = uzun ince dizi, artı = iki dikdörtgen, halka = kabuk... Hepsi aynı primitif.
 // Oyuncu bunları elle de boyayıp değiştirebilir (şekil editörü).
 const ZONE_CELL = 9;          // bir hücre = 9 dünya pikseli
-const SHAPE_MAX = 7;          // ızgara yarıçapı (15x15 hücre = 135x135 px)
+const SHAPE_MAX = 7;          // yuvarlak şekiller için ızgara yarıçapı
+// Şekil editörünün ızgarası — ÜRETİLEN her şekil buraya sığmalı ki elle düzeltilebilsin.
+const GRID_X = 12;            // x: -12..12  (25 sütun)
+const GRID_Y = 7;             // y: -7..7    (15 satır)
 
 const SHAPES = {
   // kare/dikdörtgen: w×h hücre, oyuncunun ÖNÜNE doğru uzanır
   rect(w, h) {
     const cells = [];
-    w = forgeClamp(Math.round(w), 1, 13); h = forgeClamp(Math.round(h), 1, 13);
+    w = forgeClamp(Math.round(w), 1, GRID_X); h = forgeClamp(Math.round(h), 1, GRID_Y * 2 + 1);
     for (let x = 0; x < w; x++) {
       for (let y = 0; y < h; y++) {
         cells.push({ x: x + 1, y: y - ((h - 1) / 2 | 0) });   // önden başlar
@@ -139,7 +143,7 @@ const SHAPES = {
   // dik duvar: öne uzak, yana geniş
   wall(len, dist) {
     const cells = [];
-    len = forgeClamp(Math.round(len), 2, 13);
+    len = forgeClamp(Math.round(len), 2, GRID_Y * 2 + 1);
     const d = forgeClamp(Math.round(dist || 3), 1, SHAPE_MAX);
     for (let y = -(len >> 1); y <= (len >> 1); y++) cells.push({ x: d, y });
     return cells;
@@ -180,9 +184,43 @@ function dedupeCells(cells) {
     const k = c.x + ',' + c.y;
     if (seen.has(k)) continue;
     seen.add(k);
-    if (Math.abs(c.x) <= 13 && Math.abs(c.y) <= 13) out.push({ x: c.x, y: c.y });
+    if (Math.abs(c.x) <= GRID_X && Math.abs(c.y) <= GRID_Y) out.push({ x: c.x, y: c.y });
   }
   return out;
+}
+
+// ── EL ÇİZİMİ KATMANI ─────────────────────────────────────────
+// Yazı DAVRANIŞI kurar (ateş olsun, yaksın, 5sn yerde kalsın, gökten insin);
+// çizim ŞEKLİ kurar. İkisi birbirini tamamlar: yazıdan çıkan şekli ızgarada
+// boyayıp bozabilirsin, hiç şekil yazmasan bile çizerek yoktan yaratabilirsin.
+function specZoneOp(spec) {
+  return spec && spec.ops ? spec.ops.find(o => o.op === 'zone') : null;
+}
+
+function applyHandCells(spec) {
+  if (!spec || !spec.handCells || !spec.handCells.length) return spec;
+  const cells = dedupeCells(spec.handCells);
+  const t = forgeNorm(spec.text || '');
+  let z = specZoneOp(spec);
+  if (z) {
+    z.cells = cells;                       // yazının şeklini çizim ezer
+  } else {
+    // Yazıda hiç şekil yoktu ama oyuncu çizdi → bölgeyi yoktan yarat.
+    const ground = segHas(t, 'ground');
+    const sky = segHas(t, 'fromsky');
+    spec.ops.unshift({
+      op: 'zone', cells,
+      dmg: 26,
+      dur: ground ? 5 : 0.35,
+      tickRate: ground ? 0.4 : 0,
+      place: sky ? 'sky' : (segHas(t, 'atenemy') ? 'enemy' : 'self'),
+      motion: segHas(t, 'follow') ? 'follow' : (segHas(t, 'moving') ? 'forward' : null),
+      warn: sky ? 0.7 : 0
+    });
+    spec.unknown = false;
+    if (!spec.name || spec.name === '?') spec.name = 'ÇİZİLMİŞ YETENEK';
+  }
+  return spec;
 }
 
 // Türkçe karakterleri sadeleştir (eşleşme kolaylığı)
@@ -196,7 +234,22 @@ function forgeClamp(v, lo, hi) { return v < lo ? lo : (v > hi ? hi : v); }
 // Bağlaçlar/dolgu kelimeleri — "anlamadım" listesinde gösterilmez
 const FORGE_STOP = ['once', 'sonra', 'ardindan', 'sonrasinda', 'daha', 'bir', 'bana', 'beni',
   'benim', 'kendi', 'kendime', 'olsun', 'yapsin', 'etsin', 'versin', 'olarak', 'gibi', 'icin',
-  'herkesi', 'herkese', 'onlari', 'onlara', 'dusman', 'dusmanlari', 'musteri', 'musterileri'];
+  'herkesi', 'herkese', 'onlari', 'onlara', 'dusman', 'dusmanlari', 'musteri', 'musterileri',
+  'sure', 'sure', 'seklinde', 'sekilde', 'halinde', 'kadar', 'sonrada', 'tane', 'adet'];
+
+// Atom anahtarlarının insan-okunur karşılıkları (ANLADIM listesi için)
+const ATOM_LABEL = {
+  s_rect: 'DİKDÖRTGEN', s_line: 'ÇİZGİ', s_wall: 'DUVAR', s_cross: 'ARTI', s_x: 'ÇARPI',
+  s_ring: 'ÇEMBER', s_circle: 'DAİRE',
+  ground: 'YERDE KALIR', fromsky: 'GÖKTEN', atenemy: 'DÜŞMANA', moving: 'İLERLER', follow: 'PEŞİNDEN',
+  ates: 'ATEŞ', buz: 'BUZ', zehir: 'ZEHİR', sok: 'ŞOK', kutsal: 'KUTSAL', void: 'KARANLIK',
+  kan: 'KAN', ruzgar: 'RÜZGAR',
+  burn: 'YAKMA', poison: 'ZEHİRLEME', stun: 'SERSEMLETME', chill: 'YAVAŞLATMA',
+  kb: 'SAVURMA', pull: 'ÇEKME',
+  buyuk: 'BÜYÜK', kucuk: 'KÜÇÜK', hizli: 'HIZLI',
+  auto: 'OTOMATİK', onhit: 'VURUNCA', onhurt: 'HASAR ALINCA', lowhp: 'CAN AZALINCA', onkill: 'ÖLDÜRÜNCE'
+};
+function atomLabel(k) { return ATOM_LABEL[k] || String(k).toLocaleUpperCase('tr-TR'); }
 
 // KELİME SINIRLI eşleşme: "atıl" içindeki "at" yanlışlıkla eşleşmesin.
 // Çok kelimeli öbekler (ör. "kara delik") düz arama; tek kelimeler tam ya da
@@ -268,7 +321,12 @@ function parseAbility(text) {
   const clauses = full.split(/,|;| sonra | ardindan | ve | daha sonra /).filter(c => c.trim());
 
   const addShapeOps = seg => {
-    const h = key => segHas(seg, key);
+    // cümlecik içi eşleşme — ANLADIM listesine de yazar
+    const h = key => {
+      const found = segHas(seg, key);
+      if (found && matched.indexOf(key) < 0) matched.push(key);
+      return found;
+    };
     let added = false;
 
     // ══ SERBEST ŞEKİL (zone): hücrelerden inşa edilir — "2 kareyi yan yana koy = dikdörtgen" ══

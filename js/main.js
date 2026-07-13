@@ -228,6 +228,12 @@
       Forge.input = params.get('text');
       Forge.draft = parseAbility(Forge.input);
       UI.forgeView = 'edit';
+      // &shape=1 → doğrudan ızgara şekil editörüne düş (yazının şekli hazır gelir)
+      if (params.get('shape')) {
+        const z = specZoneOp(Forge.draft);
+        Forge.draft.handCells = z ? z.cells.map(c => ({ x: c.x, y: c.y })) : [];
+        UI.forgeView = 'shape';
+      }
     }
   }
   // test: başarım/istatistik doldurma — ?unlockach=kill1,combo1 ve ?achstats=kills:600,runs:7

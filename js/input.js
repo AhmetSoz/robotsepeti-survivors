@@ -75,6 +75,12 @@ const Input = {
     canvas.addEventListener('touchmove', e => {
       e.preventDefault();
       for (const t of e.changedTouches) {
+        // oyun dışı ekranlarda parmak = fare imleci (şekil ızgarasında sürükleyerek çizim)
+        if (Game.state !== 'play') {
+          const q = this.toGame(canvas, t.clientX, t.clientY);
+          this.mouse.x = q.x; this.mouse.y = q.y;
+          continue;
+        }
         if (t.identifier !== this.joy.id) continue;
         const p = this.toGame(canvas, t.clientX, t.clientY);
         let dx = p.x - this.joy.ox, dy = p.y - this.joy.oy;
