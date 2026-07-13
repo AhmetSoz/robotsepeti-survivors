@@ -90,7 +90,7 @@ const UI = {
   // ══════════ KARAKTER ATÖLYESİ ══════════
   // 'lib' = karakterlerin · 'edit' = 4 adımlı yaratım (İSİM · GÖRÜNÜŞ · STAT · YETENEK)
   creatorView: 'lib',
-  cw: 9, cl: 24, ct: 66,          // piksel ızgarası: 14x17 hücre, 9px
+  cw: 8, cl: 24, ct: 68,          // piksel ızgarası: 14x17 hücre, 8px → 112x136
   cPaint: null,                   // sürüklerken 'add' | 'erase'
   CSTEPS: ['İSİM', 'GÖRÜNÜŞ', 'STAT', 'YETENEK'],
 
@@ -107,18 +107,39 @@ const UI = {
     d.px[y] = row.join('');
   },
 
+  // adım değişince metin kutusunun içeriğini o adıma göre kur
+  creatorStepTo(i) {
+    const d = Creator.draft;
+    Creator.step = i;
+    if (!d) return;
+    if (i === 0) this.setBox(d.name || '');
+    else if (i === 1) this.setBox(d.look || '');
+    else this.hideBox();
+  },
+
   updateCreator() {
     const isEdit = this.creatorView === 'edit';
-    // İSİM ve GÖRÜNÜŞ adımlarında metin kutusu açık (mobil klavye)
-    const wantBox = isEdit && Creator.draft && (Creator.step === 0 || Creator.step === 1);
-    this.showForgeBox(wantBox);
-    if (wantBox && Creator.draft) {
-      if (Creator.step === 0) Creator.draft.name = Forge.input.slice(0, 12);
-      else Creator.draft.look = Forge.input.slice(0, 120);
+    const d = Creator.draft;
+
+    // Metin kutusu, tuvalde çizilen kutunun TAM ÜSTÜNE oturur (başka yeri kapatmaz).
+    if (isEdit && d && Creator.step === 0) {
+      this.placeBox(140, 78, 200, 26, 12);
+      d.name = Forge.input.slice(0, 12);
+    } else if (isEdit && d && Creator.step === 1) {
+      this.placeBox(24, 46, 426, 18, 120);
+      const look = Forge.input.slice(0, 120);
+      // CANLI TASLAK: yazdıkça sprite güncellenir. Elle bir piksel boyadıysan
+      // artık yazı senin çizimini EZMEZ; "YAZIDAN ÜRET" ile zorla tazeleyebilirsin.
+      if (look !== d.look) {
+        d.look = look;
+        if (!d.painted) { Creator.pushUndo(d); d.px = parseLook(look); }
+      }
+    } else {
+      this.hideBox();
     }
 
     if (Input.back() || this.backHit()) {
-      this.showForgeBox(false);
+      this.hideBox();
       if (isEdit) { this.creatorView = 'lib'; Sfx.play('click'); return; }
       Game.state = 'title'; Game.menuIdx = 0; Sfx.play('click'); return;
     }
@@ -128,31 +149,41 @@ const UI = {
     // ══ KÜTÜPHANE ══
     const list = Creator.data.chars;
     if (Input.mouse.clicked && Input.mouseIn(30, 46, 140, 20)) {      // + YENİ KARAKTER
-      Creator.draft = newCharDraft(); Creator.editIdx = -1; Creator.step = 0;
-      Forge.input = ''; const fb = this.forgeBox(); if (fb) fb.value = '';
+      Creator.draft = newCharDraft(); Creator.editIdx = -1; Creator.undo = [];
+      this.delIdx = -1;
+      this.creatorStepTo(0);
       this.creatorView = 'edit'; Sfx.play('select'); return;
     }
+    // KOD YAPIŞTIR (başkasının karakterini al)
+    if (Input.mouse.clicked && Input.mouseIn(300, 46, 150, 20)) { Share.importPrompt(); return; }
+
     for (let i = 0; i < Math.min(list.length, 5); i++) {
       const y = 80 + i * 30;
       if (!Input.mouse.clicked) break;
       if (Input.mouseIn(30, y, 200, 28)) {                             // OYNA
-        this.showForgeBox(false);
+        this.hideBox();
         if (Input.touchMode) goFullscreen();
         Sfx.play('select'); Game.startCustomRun(list[i].id); return;
       }
       if (Input.mouseIn(238, y, 90, 28)) {                             // DÜZENLE
         Creator.draft = JSON.parse(JSON.stringify(list[i]));
-        Creator.editIdx = i; Creator.step = 0;
-        Forge.input = Creator.draft.name || '';
-        const fb = this.forgeBox(); if (fb) fb.value = Forge.input;
+        Creator.editIdx = i; Creator.undo = [];
+        Creator.draft.painted = true;      // kayıtlı çizimi yazı ezmesin
+        this.creatorStepTo(0);
         this.creatorView = 'edit'; Sfx.play('select'); return;
       }
       if (Input.mouseIn(336, y, 54, 28)) { Sfx.play('chest'); Share.copyChar(list[i]); return; }  // PAYLAŞ
-      if (Input.mouseIn(398, y, 52, 28)) { Creator.remove(i); Sfx.play('hurt'); return; }         // SİL
+      if (Input.mouseIn(398, y, 52, 28)) {                             // SİL (iki kademeli)
+        if (this.delIdx === i) { Creator.remove(i); this.delIdx = -1; Sfx.play('hurt'); }
+        else { this.delIdx = i; Sfx.play('click'); }
+        return;
+      }
     }
-    // KOD YAPIŞTIR (başkasının karakterini al)
-    if (Input.mouse.clicked && Input.mouseIn(300, 46, 150, 20)) { Share.importPrompt(); return; }
+    // listedeki başka bir yere tıklanınca silme onayı düşer
+    if (Input.mouse.clicked) this.delIdx = -1;
   },
+
+  delIdx: -1,   // "SİL" onay bekleyen satır
 
   updateCreatorEdit() {
     const d = Creator.draft;
@@ -161,21 +192,18 @@ const UI = {
     // adım sekmeleri
     for (let i = 0; i < 4; i++) {
       if (Input.mouse.clicked && Input.mouseIn(30 + i * 106, 26, 102, 16)) {
-        Creator.step = i; Sfx.play('click');
-        const fb = this.forgeBox();
-        Forge.input = i === 0 ? (d.name || '') : (i === 1 ? (d.look || '') : '');
-        if (fb) fb.value = Forge.input;
+        this.creatorStepTo(i); Sfx.play('click');
         return;
       }
     }
     // alt butonlar: KAYDET · KAYDET+OYNA
     if (Input.mouse.clicked && Input.mouseIn(240, 244, 100, 20)) {
-      if (Creator.commit()) { this.showForgeBox(false); this.creatorView = 'lib'; Sfx.play('chest'); }
+      if (Creator.commit()) { this.hideBox(); this.creatorView = 'lib'; Sfx.play('chest'); }
       return;
     }
     if (Input.mouse.clicked && Input.mouseIn(348, 244, 102, 20)) {
       if (Creator.commit()) {
-        this.showForgeBox(false);
+        this.hideBox();
         if (Input.touchMode) goFullscreen();
         Sfx.play('select');
         Game.startCustomRun(d.id);
@@ -184,36 +212,57 @@ const UI = {
     }
 
     if (Creator.step === 1) {                                    // ── GÖRÜNÜŞ ──
-      // fırça
+      // ── fırça: sürükleyerek boya, dolu hücreye basınca sil ──
       if (Input.mouse.down) {
         const c = this.pxAt(Input.mouse.x, Input.mouse.y);
         if (c) {
           const cur = d.px[c.y][c.x];
           const want = PX_CHARS[Creator.palIdx];
-          if (!this.cPaint) this.cPaint = cur === want ? 'erase' : 'add';
+          if (!this.cPaint) {
+            this.cPaint = cur === want ? 'erase' : 'add';
+            Creator.pushUndo(d);                     // fırça darbesinin tamamı tek geri al
+          }
           const ch = this.cPaint === 'erase' ? '.' : want;
-          if (cur !== ch) { this.setPx(d, c.x, c.y, ch); Sfx.play('click'); }
+          if (cur !== ch) {
+            this.setPx(d, c.x, c.y, ch);
+            d.painted = true;                        // artık yazı çizimini ezmez
+            Sfx.play('click');
+          }
         }
       } else this.cPaint = null;
 
       if (!Input.mouse.clicked) return;
-      // palet (sağda 4x6)
+      // palet (4 sıra x 6)
       for (let i = 0; i < PX_PAL.length; i++) {
-        const px = 300 + (i % 6) * 22, py = 70 + ((i / 6) | 0) * 22;
-        if (Input.mouseIn(px, py, 20, 20)) { Creator.palIdx = i; Sfx.play('click'); return; }
+        const px = 300 + (i % 6) * 20, py = 76 + ((i / 6) | 0) * 20;
+        if (Input.mouseIn(px, py, 19, 19)) { Creator.palIdx = i; Sfx.play('click'); return; }
       }
-      if (Input.mouseIn(300, 168, 150, 20)) {                    // YAZIDAN ÜRET
+      // ÜNİFORMAYI BOYA: seçili rengi kıyafete uygula (renk değişimi burada olur)
+      if (Input.mouseIn(300, 162, 150, 20)) {
+        Creator.pushUndo(d);
+        Creator.recolorSuit(d, Creator.palIdx);
+        d.painted = true;
+        Sfx.play('select'); return;
+      }
+      if (Input.mouseIn(300, 186, 150, 20)) {                    // YAZIDAN ÜRET (zorla tazele)
+        Creator.pushUndo(d);
         d.px = parseLook(d.look || '');
+        d.painted = false;                           // yeniden yazı takibine dön
         Sfx.play('select'); return;
       }
-      if (Input.mouseIn(300, 192, 72, 20)) {                     // SIFIRLA
-        d.px = baseBody(Creator.palIdx); Sfx.play('hurt'); return;
+      if (Input.mouseIn(300, 210, 47, 20)) {                     // GERİ AL
+        if (Creator.popUndo(d)) Sfx.play('click'); else Sfx.play('hurt');
+        return;
       }
-      if (Input.mouseIn(378, 192, 72, 20)) {                     // AYNALA (sol yarıyı sağa)
-        for (let y = 0; y < PX_H; y++) {
-          for (let x = 0; x < PX_W / 2; x++) this.setPx(d, PX_W - 1 - x, y, d.px[y][x]);
-        }
-        Sfx.play('select'); return;
+      if (Input.mouseIn(351, 210, 47, 20)) {                     // GÖVDE (seçili renkte taban)
+        Creator.pushUndo(d);
+        d.px = baseBody(Creator.palIdx);
+        d.painted = true; Sfx.play('select'); return;
+      }
+      if (Input.mouseIn(402, 210, 48, 20)) {                     // BOŞALT (sıfırdan çiz)
+        Creator.pushUndo(d);
+        d.px = blankBody();
+        d.painted = true; Sfx.play('hurt'); return;
       }
       return;
     }
@@ -294,11 +343,14 @@ const UI = {
       drawText(ctx, 'DÜZENLE', 283, y + 10, COL.teal, { align: 'center' });
       this.panel(ctx, 336, y, 54, 28, COL.gold);
       drawText(ctx, 'PAYLAŞ', 363, y + 10, COL.gold, { align: 'center' });
-      this.panel(ctx, 398, y, 52, 28, COL.red);
-      drawText(ctx, 'SİL', 424, y + 10, COL.red, { align: 'center' });
+      const arm = this.delIdx === i;               // silme onayı bekliyor
+      this.panel(ctx, 398, y, 52, 28, arm ? COL.yellow : COL.red);
+      drawText(ctx, arm ? 'EMİN?' : 'SİL', 424, y + 10, arm ? COL.yellow : COL.red, { align: 'center' });
     }
     if (Share.msg && Game.uiT - Share.msgT < 4) {
       drawText(ctx, Share.msg, 240, 240, COL.yellow, { align: 'center' });
+    } else if (this.delIdx >= 0) {
+      drawText(ctx, 'SİLMEK İÇİN "EMİN?"E BİR KEZ DAHA BAS', 240, 240, COL.red, { align: 'center' });
     } else {
       drawText(ctx, 'SATIRA TIKLA: O KARAKTERLE OYNA · ESC: GERİ', 240, 240, COL.greyDark, { align: 'center' });
     }
@@ -331,11 +383,9 @@ const UI = {
 
   drawCStepName(ctx, d) {
     drawText(ctx, 'KARAKTERİNİN ADI NE?', 240, 58, COL.greyLight, { align: 'center' });
-    this.panel(ctx, 140, 78, 200, 26, COL.navy);
-    const cur = ((Game.uiT * 3) | 0) % 2 ? '_' : '';
-    drawText(ctx, (d.name || '').toLocaleUpperCase('tr-TR') + cur, 240, 86, COL.white,
-      { align: 'center', scale: 2 });
-    if (!d.name) drawText(ctx, 'YAZMAYA BAŞLA (EN ÇOK 12 HARF)', 240, 112, COL.greyDark, { align: 'center' });
+    // yazının kendisini gerçek metin kutusu gösterir (tam bu panelin üstünde)
+    this.panel(ctx, 140, 78, 200, 26, this.boxOn ? COL.teal : COL.navy);
+    if (!d.name) drawText(ctx, 'BURAYA TIKLA VE YAZ (12 HARF)', 240, 112, COL.greyDark, { align: 'center' });
     // canlı önizleme
     if (d.px) {
       const spr = buildCustomSprite(d.px);
@@ -348,6 +398,13 @@ const UI = {
   },
 
   drawCStepLook(ctx, d) {
+    // ── tarif kutusu (en üstte): yazdıkça taslak CANLI güncellenir ──
+    this.panel(ctx, 24, 46, 426, 18, this.boxOn ? COL.teal : COL.navy);
+    if (!d.look) {
+      drawText(ctx, 'BURAYA TIKLA VE TARİF ET: "kırmızı saçlı, gözlüklü, mor pelerinli robot"',
+        30, 51, COL.greyDark);
+    }
+
     // ── piksel ızgarası ──
     const W = PX_W * this.cw, H = PX_H * this.cw;
     ctx.fillStyle = '#0e1020';
@@ -370,49 +427,47 @@ const UI = {
       ctx.strokeStyle = COL.yellow;
       ctx.strokeRect(this.cl + hov.x * this.cw + 0.5, this.ct + hov.y * this.cw + 0.5, this.cw - 1, this.cw - 1);
     }
-    drawText(ctx, 'SÜRÜKLE: BOYA · AYNI RENGE BAS: SİL', this.cl, 54, COL.greyDark);
+    drawText(ctx, 'SÜRÜKLE: BOYA · AYNI RENGE BAS: SİL', this.cl, this.ct + H + 5, COL.greyDark);
 
-    // ── canlı önizleme (gerçek boy + büyütülmüş) ──
+    // ── canlı önizleme (büyütülmüş + gerçek boy) ──
     const spr = buildCustomSprite(d.px);
     const fr = ((Game.uiT * 5) | 0) % 2;
     ctx.save(); ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(spr.frames[fr].n, 176, 76, 42, 51);
+    ctx.drawImage(spr.frames[fr].n, 180, 76, 56, 68);
     ctx.restore();
-    drawText(ctx, 'OYUNDAKİ HALİ', 197, 132, COL.grey, { align: 'center' });
-    ctx.drawImage(spr.frames[fr].n, 190, 146);
+    drawText(ctx, 'OYUNDAKİ HALİ', 208, 150, COL.grey, { align: 'center' });
+    ctx.drawImage(spr.frames[fr].n, 201, 164);
 
-    // ── palet ──
+    // ── palet (seçili renk = fırça) ──
+    drawText(ctx, 'FIRÇA RENGİ', 360, 68, COL.greyLight, { align: 'center' });
     for (let i = 0; i < PX_PAL.length; i++) {
-      const px = 300 + (i % 6) * 22, py = 70 + ((i / 6) | 0) * 22;
+      const px = 300 + (i % 6) * 20, py = 76 + ((i / 6) | 0) * 20;
       ctx.fillStyle = COL[PX_PAL[i]];
-      ctx.fillRect(px, py, 20, 20);
+      ctx.fillRect(px, py, 19, 19);
       if (Creator.palIdx === i) {
         ctx.strokeStyle = COL.yellow; ctx.lineWidth = 2;
-        ctx.strokeRect(px - 1, py - 1, 22, 22); ctx.lineWidth = 1;
+        ctx.strokeRect(px - 1, py - 1, 21, 21); ctx.lineWidth = 1;
       } else {
         ctx.strokeStyle = COL.outline;
-        ctx.strokeRect(px + 0.5, py + 0.5, 19, 19);
+        ctx.strokeRect(px + 0.5, py + 0.5, 18, 18);
       }
     }
-    drawText(ctx, 'RENK SEÇ', 366, 58, COL.greyLight, { align: 'center' });
 
-    // ── yazıdan üret ──
-    this.panel(ctx, 300, 168, 150, 20, COL.orange);
-    drawText(ctx, 'YAZIDAN ÜRET', 375, 174, COL.orange, { align: 'center', shadow: COL.outline });
-    this.panel(ctx, 300, 192, 72, 20, COL.red);
-    drawText(ctx, 'SIFIRLA', 336, 198, COL.red, { align: 'center' });
-    this.panel(ctx, 378, 192, 72, 20, COL.teal);
-    drawText(ctx, 'AYNALA', 414, 198, COL.teal, { align: 'center' });
+    // ── eylemler ──
+    this.panel(ctx, 300, 162, 150, 20, COL.orange);
+    drawText(ctx, 'ÜNİFORMAYI BOYA', 375, 168, COL.orange, { align: 'center', shadow: COL.outline });
+    this.panel(ctx, 300, 186, 150, 20, COL.yellow);
+    drawText(ctx, 'YAZIDAN ÜRET', 375, 192, COL.yellow, { align: 'center', shadow: COL.outline });
+    const canUndo = Creator.undo.length > 0;
+    this.panel(ctx, 300, 210, 47, 20, canUndo ? COL.teal : COL.navy);
+    drawText(ctx, 'GERİ AL', 323, 216, canUndo ? COL.teal : COL.greyDark, { align: 'center' });
+    this.panel(ctx, 351, 210, 47, 20, COL.grey);
+    drawText(ctx, 'GÖVDE', 374, 216, COL.grey, { align: 'center' });
+    this.panel(ctx, 402, 210, 48, 20, COL.red);
+    drawText(ctx, 'BOŞALT', 426, 216, COL.red, { align: 'center' });
 
-    // tarif kutusu (yazıp "YAZIDAN ÜRET"e basınca taslak çizilir, sonra elle bozarsın)
-    this.panel(ctx, 24, 222, 426, 20, COL.navy);
-    const cur = ((Game.uiT * 3) | 0) % 2 ? '_' : '';
-    if (d.look) {
-      drawText(ctx, (d.look + cur).slice(0, 70), 30, 228, COL.white);
-    } else {
-      drawText(ctx, 'TARİF ET: "kırmızı saçlı, gözlüklü, mor pelerinli robot"' + cur, 30, 228, COL.greyDark);
-    }
-    drawText(ctx, 'ÇİZİM SENİN', 30, 250, COL.navy);
+    drawText(ctx, d.painted ? 'ÇİZİMİN KİLİTLİ — YAZI EZMEZ' : 'YAZDIKÇA TASLAK CANLI ÇİZİLİR',
+      30, 250, d.painted ? COL.gold : COL.navy);
   },
 
   drawCStepStats(ctx, d) {
@@ -488,20 +543,60 @@ const UI = {
   gw: 9, gx: 12, gy: 7, gl: 128, gt: 64,
   paintMode: null,    // sürüklerken 'add' | 'erase'
 
-  showForgeBox(on) {
+  // ── METİN GİRİŞİ ────────────────────────────────────────────
+  // Gerçek bir <textarea>'yı, tuvalde çizdiğimiz kutunun TAM ÜSTÜNE oturtur.
+  // Böylece: imleç görünür, tıkladığın yere yazarsın, mobil klavye açılır ve
+  // kutunun dışındaki tuval tıklamaları (palet, ızgara, butonlar) serbest kalır.
+  boxOn: false,
+
+  // gx,gy,gw,gh = OYUN koordinatlarında kutu; lines = kaç satır sığmalı
+  placeBox(gx, gy, gw, gh, maxLen) {
     const fb = this.forgeBox();
-    if (!fb) return;
-    if (on) {
-      if (fb.style.display !== 'block') {
-        fb.style.display = 'block';
-        fb.value = Forge.input || '';
-        if (!Input.touchMode) fb.focus();
-      }
-      Forge.input = fb.value.slice(0, 300);
-    } else if (fb.style.display !== 'none') {
-      fb.blur(); fb.style.display = 'none';
+    const cv = document.getElementById('game');
+    if (!fb || !cv) return;
+    const r = cv.getBoundingClientRect();
+    if (!r.width || !r.height) return;                 // tam ekran geçişinde rect 0 olabilir
+    const sx = r.width / 480, sy = r.height / 270;
+
+    if (fb.style.display !== 'block') {
+      fb.style.display = 'block';
+      fb.value = Forge.input || '';
+      if (!Input.touchMode) { try { fb.focus(); } catch (e) { /* yok say */ } }
     }
+    fb.maxLength = maxLen || 300;
+    fb.style.left = Math.round(r.left + gx * sx) + 'px';
+    fb.style.top = Math.round(r.top + gy * sy) + 'px';
+    fb.style.width = Math.round(gw * sx) + 'px';
+    fb.style.height = Math.round(gh * sy) + 'px';
+    // yazı tuvalle aynı ölçekte büyüsün (mobilde en az 16px: iOS zoom yapmasın)
+    const fs = Math.max(16, Math.round(8 * sy));
+    fb.style.fontSize = fs + 'px';
+    fb.style.lineHeight = Math.round(fs * 1.25) + 'px';
+
+    // kullanıcının yazdığını al: satır sonu yok, uzunluk sınırlı
+    const v = fb.value.replace(/[\r\n]+/g, ' ').slice(0, maxLen || 300);
+    if (v !== fb.value) fb.value = v;
+    Forge.input = v;
+    this.boxOn = true;
   },
+
+  hideBox() {
+    const fb = this.forgeBox();
+    if (!fb || fb.style.display === 'none') { this.boxOn = false; return; }
+    fb.blur();
+    fb.style.display = 'none';
+    this.boxOn = false;
+  },
+
+  // kutunun içeriğini dışarıdan tazele (adım/ekran değişiminde)
+  setBox(text) {
+    Forge.input = text || '';
+    const fb = this.forgeBox();
+    if (fb) fb.value = Forge.input;
+  },
+
+  // eski çağrılar için ince sarmalayıcı (sadece gizleme yolunda kullanılıyor)
+  showForgeBox(on) { if (!on) this.hideBox(); },
 
   // metni yeniden çözümle ama oyuncunun EL ÇİZİMİNİ koru
   reparse() {
@@ -525,7 +620,9 @@ const UI = {
   },
 
   updateForge() {
-    this.showForgeBox(this.forgeView === 'edit');
+    // metin kutusu SADECE yazma ekranında ve tam olarak çizilen panelin üstünde
+    if (this.forgeView === 'edit') this.placeBox(30, 40, 420, 58, 300);
+    else this.hideBox();
 
     if (Input.back() || this.backHit()) {
       if (this.forgeView === 'shape') { this.forgeView = 'edit'; Sfx.play('click'); return; }
@@ -546,9 +643,13 @@ const UI = {
 
     // ══ EDİTÖR ══
     if (this.forgeView === 'edit') {
-      const fb = this.forgeBox();
-      if (Input.mouse.clicked && Input.mouseIn(30, 54, 420, 44) && fb && Input.touchMode) fb.focus();
-      // ANLA
+      // CANLI ÇÖZÜMLEME: yazdıkça anla. "ANLA"ya basmayı unutmak diye bir şey kalmasın.
+      if (Forge.input !== Forge.lastParsed) {
+        Forge.lastParsed = Forge.input;
+        if (Forge.input.trim()) this.reparse();
+        else Forge.draft = null;
+      }
+      // ANLA (elle yenile)
       if (Input.mouse.clicked && Input.mouseIn(30, 106, 98, 20)) {
         this.reparse();
         Sfx.play('select');
@@ -562,20 +663,20 @@ const UI = {
             const z = specZoneOp(d);
             d.handCells = z ? z.cells.map(c => ({ x: c.x, y: c.y })) : [];
           }
-          this.showForgeBox(false);
+          this.hideBox();
           this.forgeView = 'shape'; Sfx.play('select');
         }
         return;
       }
       // KAYDET (kütüphaneye ekle / üstüne yaz)
       if (Forge.draft && !Forge.draft.unknown && Input.mouse.clicked && Input.mouseIn(238, 106, 98, 20)) {
-        if (Forge.commit()) { this.forgeView = 'lib'; Sfx.play('chest'); }
+        if (Forge.commit()) { this.hideBox(); this.forgeView = 'lib'; Sfx.play('chest'); }
         return;
       }
       // KAYDET + TEST
       if (Forge.draft && !Forge.draft.unknown && Input.mouse.clicked && Input.mouseIn(342, 106, 108, 20)) {
         if (Forge.commit()) {
-          this.showForgeBox(false);
+          this.hideBox();
           if (Input.touchMode) goFullscreen();
           Sfx.play('select');
           Game.startForgeTest('ahmet');
@@ -589,14 +690,14 @@ const UI = {
     const list = Forge.data.abilities;
     // YENİ YETENEK butonu
     if (Input.mouse.clicked && Input.mouseIn(30, 46, 130, 20)) {
-      Forge.draft = null; Forge.editIdx = -1; Forge.input = '';
-      const fb = this.forgeBox(); if (fb) fb.value = '';
+      Forge.draft = null; Forge.editIdx = -1; Forge.lastParsed = null;
+      this.setBox('');
       this.forgeView = 'edit'; Sfx.play('select');
       return;
     }
     // OYNA butonu (takılı yeteneklerle koşu)
     if (Forge.equippedSpecs().length && Input.mouse.clicked && Input.mouseIn(320, 46, 130, 20)) {
-      this.showForgeBox(false);
+      this.hideBox();
       if (Input.touchMode) goFullscreen();
       Sfx.play('select');
       Game.startForgeTest('ahmet');
@@ -613,8 +714,8 @@ const UI = {
       }
       if (Input.mouseIn(262, y, 68, 24)) {           // DÜZENLE
         Forge.editIdx = i; Forge.draft = list[i];
-        Forge.input = list[i].text || '';
-        const fb = this.forgeBox(); if (fb) fb.value = Forge.input;
+        this.setBox(list[i].text || '');
+        Forge.lastParsed = Forge.input;              // açar açmaz yeniden çözümleme yapma
         this.forgeView = 'edit'; Sfx.play('select'); return;
       }
       if (Input.mouseIn(338, y, 58, 24)) {           // PAYLAŞ
@@ -817,19 +918,13 @@ const UI = {
     drawText(ctx, 'UZUN UZUN ANLAT — NE YAPSIN, NASIL GÖRÜNSÜN, NE ZAMAN ÇALIŞSIN?',
       240, 28, COL.greyLight, { align: 'center' });
 
-    // uzun metin kutusu (3 satıra sarar)
-    this.panel(ctx, 30, 40, 420, 58, COL.navy);
-    const cursor = ((Game.uiT * 3) | 0) % 2 ? '_' : '';
-    const shown = Forge.input || '';
-    if (shown) {
-      const lines = wrapText(shown + cursor, 66).slice(-4);
-      let ty = 46;
-      for (const ln of lines) { drawText(ctx, ln, 36, ty, COL.white); ty += 12; }
-    } else {
-      drawText(ctx, 'örn: "her 3 saniyede otomatik olarak', 36, 48, COL.greyDark);
-      drawText(ctx, 'her yöne 8 zehir mermisi saç, zehirlesin"' + cursor, 36, 60, COL.greyDark);
-      drawText(ctx, 'örn: "önce ileri atıl, sonra dev ateş patlaması yap, yaksın ve savursun"',
-        36, 76, COL.navy);
+    // metin kutusu: içindeki yazıyı GERÇEK textarea gösteriyor (UI.placeBox),
+    // tuval sadece çerçeveyi ve boşken ipucunu çizer.
+    this.panel(ctx, 30, 40, 420, 58, this.boxOn ? COL.teal : COL.navy);
+    if (!Forge.input) {
+      drawText(ctx, 'BURAYA TIKLA VE ANLAT — örn:', 36, 48, COL.greyDark);
+      drawText(ctx, '"dikdörtgen ateş at, yerde kalıp yaksın"', 36, 62, COL.navy);
+      drawText(ctx, '"her 3 saniyede her yöne 8 zehir mermisi saç"', 36, 76, COL.navy);
     }
 
     // butonlar

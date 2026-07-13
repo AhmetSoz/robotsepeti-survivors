@@ -75,21 +75,29 @@ body {
   opacity: 0.02;
   z-index: 5;
 }
-/* skill atölyesi metin girişi: görünmez, sadece klavyeyi/yazıyı yakalar */
+/* Atölye metin girişi: GÖRÜNÜR gerçek alan. Konumu/boyutu JS ile, tuvalde çizilen
+   kutunun tam üstüne denk gelecek şekilde ayarlanır (UI.placeBox).
+   - görünür imleç + dokununca tam oraya yazıyorsun
+   - sadece kendi dikdörtgeni tıklamaları yakalar; tuvalin kalanı serbest kalır
+   - font-size >= 16px: iOS odaklanınca sayfayı yakınlaştırmasın */
 #forgeBox {
   display: none;
   position: fixed;
-  left: 50%;
-  top: 42%;
-  transform: translate(-50%, -50%);
-  width: 300px;
-  height: 30px;
-  font-size: 16px;
+  margin: 0;
+  padding: 2px 4px;
   border: none;
   outline: none;
-  background: transparent;
-  color: transparent;
-  caret-color: transparent;
-  opacity: 0.02;
+  resize: none;
+  overflow: hidden;
+  background: rgba(24, 20, 37, 0.55);
+  color: #f4f4f8;
+  caret-color: #fee761;
+  font-family: "Consolas", "DejaVu Sans Mono", monospace;
+  font-weight: 700;
+  font-size: 16px;
+  line-height: 1.25;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
   z-index: 5;
 }
+#forgeBox::selection { background: #fee761; color: #181425; }

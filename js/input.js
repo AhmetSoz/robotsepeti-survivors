@@ -18,8 +18,11 @@ const Input = {
       // preventDefault YAPILMASIN — yoksa Space yutulur, kelimeler bitişik yazılır.
       const inBox = e.target && (e.target.id === 'nameBox' || e.target.id === 'forgeBox');
       if (inBox) {
+        // forgeBox bir <textarea>: Enter yeni satır açmasın, cümleyi bitirsin
+        if (['Enter', 'NumpadEnter'].includes(e.code)) e.preventDefault();
         if (!e.repeat && ['Enter', 'NumpadEnter', 'Escape'].includes(e.code)) {
           this.pressed[e.code] = true;
+          if (e.code === 'Escape') e.target.blur();
         }
         return;
       }
@@ -34,6 +37,7 @@ const Input = {
     });
     canvas.addEventListener('mousedown', () => {
       Sfx.init();
+      this.blurBox();
       this.mouse.down = true;
       this.mouse.clicked = true;
     });
@@ -43,6 +47,7 @@ const Input = {
     canvas.addEventListener('touchstart', e => {
       e.preventDefault();
       Sfx.init();
+      this.blurBox();          // tuvale dokununca klavye kapansın (çizim rahat olsun)
       this.touchMode = true;
       for (const t of e.changedTouches) {
         const p = this.toGame(canvas, t.clientX, t.clientY);
@@ -102,6 +107,14 @@ const Input = {
     };
     canvas.addEventListener('touchend', endTouch, { passive: false });
     canvas.addEventListener('touchcancel', endTouch, { passive: false });
+  },
+
+  // Tuvale basınca atölye metin kutusundan odağı al: mobilde klavye kapanır,
+  // tuş vuruşları yanlışlıkla kutuya kaçmaz. (İsim kutusu hariç — o oyun sonu ekranında
+  // tuvale dokunarak skoru kaydettiğin akışta odakta kalmalı.)
+  blurBox() {
+    const a = document.activeElement;
+    if (a && a.id === 'forgeBox') a.blur();
   },
 
   // ekran koordinatını 480x270 oyun koordinatına çevirir

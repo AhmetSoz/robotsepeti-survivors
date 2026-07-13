@@ -21,9 +21,10 @@
 <!-- oyun sonu isim girişi: görünmez ama odaklanabilir (mobil klavyeyi açar) -->
 <input id="nameBox" type="text" maxlength="12" autocomplete="off" autocorrect="off"
        autocapitalize="characters" spellcheck="false" enterkeyhint="done">
-<!-- skill atölyesi metin girişi (mobil klavye için gerçek input) -->
-<input id="forgeBox" type="text" maxlength="300" autocomplete="off" autocorrect="off"
-       spellcheck="false" enterkeyhint="done" placeholder="skilini anlat...">
+<!-- atölye metin girişi: GERÇEK ve GÖRÜNÜR. JS onu, tuvalde çizilen kutunun tam
+     üstüne oturtur → nereye tıkladığın ve nereye yazdığın bellidir, imleç görünür. -->
+<textarea id="forgeBox" maxlength="300" autocomplete="off" autocorrect="off"
+          spellcheck="false" wrap="soft"></textarea>
 <script src="js/utils.js"></script>
 <script src="js/font.js"></script>
 <script src="js/audio.js"></script>

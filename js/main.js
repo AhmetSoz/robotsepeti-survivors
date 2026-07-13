@@ -253,12 +253,13 @@
     if (UI.creatorView === 'edit') {
       Creator.draft = newCharDraft();
       Creator.editIdx = -1;
-      Creator.step = clamp(parseInt(params.get('cstep') || '0', 10), 0, 3);
       if (params.get('cname')) Creator.draft.name = params.get('cname');
       if (params.get('look')) {
         Creator.draft.look = params.get('look');
         Creator.draft.px = parseLook(Creator.draft.look);
       }
+      // adım kutusunu da kur (gerçek akışta creatorStepTo bunu yapıyor)
+      UI.creatorStepTo(clamp(parseInt(params.get('cstep') || '0', 10), 0, 3));
     }
   }
   if (params.get('screen') === 'forge') {

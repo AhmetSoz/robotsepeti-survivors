@@ -61,6 +61,7 @@ const Game = {
 
   // ── koşu başlat ──
   startRun(charId) {
+    if (typeof UI !== 'undefined' && UI.hideBox) UI.hideBox();   // atölye kutusu sahada kalmasın
     this.time = 0; this.xp = 0; this.level = 1;
     // Günün Vardiyası: seçilmişse modları ve tohumlu RNG'yi kur
     this.daily = this.dailyPending;

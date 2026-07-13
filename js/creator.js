@@ -149,8 +149,20 @@ function parseLook(text) {
   return rows.map(r => r.join(''));
 }
 
+// Boş tuval: her şeyi sıfırdan çizmek isteyenler için
+function blankBody() {
+  const rows = [];
+  for (let y = 0; y < PX_H; y++) rows.push('.'.repeat(PX_W));
+  return rows;
+}
+
 // ── sprite üretimi (motorun beklediği biçim) ──
+// Editörde her karede çağrılıyor → aynı ızgara için sonucu önbellekle,
+// yoksa kare başına 8 tuval üretip telefonu boğuyoruz.
+const _sprCache = { key: null, spr: null };
 function buildCustomSprite(px) {
+  const key = px.join('|');
+  if (_sprCache.key === key) return _sprCache.spr;
   const map = pxMap();
   const frames = [];
   for (let f = 0; f < 2; f++) {
@@ -158,7 +170,9 @@ function buildCustomSprite(px) {
     gridPaint(c.getContext('2d'), px, map, 0, f);   // 2. kare 1px zıplar → yürüyüş
     frames.push(makeVariant(c));
   }
-  return { w: PX_W, h: PX_H, frames };
+  const spr = { w: PX_W, h: PX_H, frames };
+  _sprCache.key = key; _sprCache.spr = spr;
+  return spr;
 }
 
 // ── Karakter deposu ──
@@ -200,6 +214,38 @@ function charDefOf(c) {
 const Creator = {
   data: { chars: [] },
   draft: null, editIdx: -1, step: 0, palIdx: 12,
+  undo: [],                                   // çizim geçmişi (en çok 40 adım)
+
+  pushUndo(d) {
+    if (!d || !d.px) return;
+    this.undo.push(d.px.slice());
+    if (this.undo.length > 40) this.undo.shift();
+  },
+
+  popUndo(d) {
+    if (!d || !this.undo.length) return false;
+    d.px = this.undo.pop();
+    return true;
+  },
+
+  // ÜNİFORMA RENGİ: gövdedeki kıyafet pikselleri (ve gölgesi) yeni renge boyanır.
+  // Elle yaptığın diğer çizimlere (saç, gözlük, pelerin) dokunmaz.
+  recolorSuit(d, idx) {
+    if (!d || !d.px) return;
+    const oldS = d.px[11] ? d.px[11][6] : null;   // göğüs ortası = kıyafet rengi
+    const oldSh = d.px[14] ? d.px[14][6] : null;  // etek/alt = gölge
+    const newS = CH(idx), newSh = CH(PX_SHADE[idx] !== undefined ? PX_SHADE[idx] : idx);
+    if (!oldS || oldS === '.') { d.px = baseBody(idx); return; }
+    d.px = d.px.map(row => {
+      let out = '';
+      for (const ch of row) {
+        if (ch === oldS) out += newS;
+        else if (oldSh && oldSh !== '.' && oldSh !== oldS && ch === oldSh) out += newSh;
+        else out += ch;
+      }
+      return out;
+    });
+  },
 
   load() {
     try {
