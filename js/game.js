@@ -129,6 +129,18 @@ const Game = {
     this.banner = { txt: 'ÖZEL YETENEK: ' + names, t: 0 };
   },
 
+  // Özel karakterle koşu: yetenekleri slotlara takıp normal koşuyu başlat
+  startCustomRun(charId) {
+    if (!CHARACTERS[charId]) return;
+    Creator.equipFor(charId);
+    this.startRun(charId);
+    const c = Creator.byId(charId);
+    const eq = Forge.equippedSpecs();
+    this.banner = eq.length
+      ? { txt: (c ? c.name.toLocaleUpperCase('tr-TR') : '') + ': ' + eq.map(s => s.name).join(' · '), t: 0 }
+      : { txt: 'KENDİ KARAKTERİN SAHADA', t: 0 };
+  },
+
   xpNeeded(l) { return 8 + (l - 1) * 7 + Math.max(0, l - 8) * 6; },
 
   displayScore() {
@@ -166,6 +178,7 @@ const Game = {
       case 'album': UI.updateAlbum(); break;
       case 'daily': UI.updateDaily(); break;
       case 'forge': UI.updateForge(); break;
+      case 'creator': UI.updateCreator(); break;
     }
 
     if (this.banner) {
@@ -939,6 +952,7 @@ const Game = {
     if (this.state === 'album') { UI.drawAlbum(ctx); return; }
     if (this.state === 'daily') { UI.drawDaily(ctx); return; }
     if (this.state === 'forge') { UI.drawForge(ctx); return; }
+    if (this.state === 'creator') { UI.drawCreator(ctx); return; }
 
     // oyun sahnesi (play, levelup, chest, pause, over)
     this.camRX = this.camX + (this.shake > 0 ? rand(-this.shake, this.shake) : 0) + this.kickX;

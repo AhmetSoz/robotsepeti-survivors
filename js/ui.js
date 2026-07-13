@@ -57,7 +57,7 @@ const UI = {
       if (w.x > 500) Game.bgWalkers.splice(i, 1);
     }
 
-    const items = 8;
+    const items = 9;
     this.navVertical(items);
     const hit = this.titleMenuHit();
     if (hit >= 0) Game.menuIdx = hit;
@@ -70,20 +70,415 @@ const UI = {
         Game.state = 'select'; Game.selIdx = 0;
       }
       else if (Game.menuIdx === 1) { Game.state = 'daily'; }
-      else if (Game.menuIdx === 2) { Game.state = 'forge'; }
-      else if (Game.menuIdx === 3) { Game.state = 'shop'; Game.menuIdx = 0; }
-      else if (Game.menuIdx === 4) { Game.state = 'album'; Game.menuIdx = 0; }
-      else if (Game.menuIdx === 5) { Game.state = 'scores'; Game.scoresT = Game.uiT; this.scoresTab = 0; Game.fetchScores(); }
-      else if (Game.menuIdx === 6) { isFullscreen() ? exitFullscreen() : goFullscreen(); }
+      else if (Game.menuIdx === 2) { Game.state = 'creator'; this.creatorView = 'lib'; }
+      else if (Game.menuIdx === 3) { Game.state = 'forge'; this.forgeView = 'lib'; }
+      else if (Game.menuIdx === 4) { Game.state = 'shop'; Game.menuIdx = 0; }
+      else if (Game.menuIdx === 5) { Game.state = 'album'; Game.menuIdx = 0; }
+      else if (Game.menuIdx === 6) { Game.state = 'scores'; Game.scoresT = Game.uiT; this.scoresTab = 0; Game.fetchScores(); }
+      else if (Game.menuIdx === 7) { isFullscreen() ? exitFullscreen() : goFullscreen(); }
       else { Sfx.setMute(!Sfx.muted); }
     }
   },
 
   titleMenuHit() {
-    for (let i = 0; i < 8; i++) {
-      if (Input.mouseIn(160, 156 + i * 12 - 3, 160, 11)) return i;
+    for (let i = 0; i < 9; i++) {
+      if (Input.mouseIn(160, 152 + i * 11 - 2, 160, 10)) return i;
     }
     return -1;
+  },
+
+  // ══════════ KARAKTER ATÖLYESİ ══════════
+  // 'lib' = karakterlerin · 'edit' = 4 adımlı yaratım (İSİM · GÖRÜNÜŞ · STAT · YETENEK)
+  creatorView: 'lib',
+  cw: 9, cl: 24, ct: 66,          // piksel ızgarası: 14x17 hücre, 9px
+  cPaint: null,                   // sürüklerken 'add' | 'erase'
+  CSTEPS: ['İSİM', 'GÖRÜNÜŞ', 'STAT', 'YETENEK'],
+
+  // ekran noktası → sprite pikseli
+  pxAt(mx, my) {
+    if (mx < this.cl || my < this.ct) return null;
+    if (mx >= this.cl + PX_W * this.cw || my >= this.ct + PX_H * this.cw) return null;
+    return { x: (mx - this.cl) / this.cw | 0, y: (my - this.ct) / this.cw | 0 };
+  },
+
+  setPx(d, x, y, ch) {
+    const row = d.px[y].split('');
+    row[x] = ch;
+    d.px[y] = row.join('');
+  },
+
+  updateCreator() {
+    const isEdit = this.creatorView === 'edit';
+    // İSİM ve GÖRÜNÜŞ adımlarında metin kutusu açık (mobil klavye)
+    const wantBox = isEdit && Creator.draft && (Creator.step === 0 || Creator.step === 1);
+    this.showForgeBox(wantBox);
+    if (wantBox && Creator.draft) {
+      if (Creator.step === 0) Creator.draft.name = Forge.input.slice(0, 12);
+      else Creator.draft.look = Forge.input.slice(0, 120);
+    }
+
+    if (Input.back() || this.backHit()) {
+      this.showForgeBox(false);
+      if (isEdit) { this.creatorView = 'lib'; Sfx.play('click'); return; }
+      Game.state = 'title'; Game.menuIdx = 0; Sfx.play('click'); return;
+    }
+
+    if (isEdit) { this.updateCreatorEdit(); return; }
+
+    // ══ KÜTÜPHANE ══
+    const list = Creator.data.chars;
+    if (Input.mouse.clicked && Input.mouseIn(30, 46, 140, 20)) {      // + YENİ KARAKTER
+      Creator.draft = newCharDraft(); Creator.editIdx = -1; Creator.step = 0;
+      Forge.input = ''; const fb = this.forgeBox(); if (fb) fb.value = '';
+      this.creatorView = 'edit'; Sfx.play('select'); return;
+    }
+    for (let i = 0; i < Math.min(list.length, 5); i++) {
+      const y = 80 + i * 30;
+      if (!Input.mouse.clicked) break;
+      if (Input.mouseIn(30, y, 200, 28)) {                             // OYNA
+        this.showForgeBox(false);
+        if (Input.touchMode) goFullscreen();
+        Sfx.play('select'); Game.startCustomRun(list[i].id); return;
+      }
+      if (Input.mouseIn(238, y, 90, 28)) {                             // DÜZENLE
+        Creator.draft = JSON.parse(JSON.stringify(list[i]));
+        Creator.editIdx = i; Creator.step = 0;
+        Forge.input = Creator.draft.name || '';
+        const fb = this.forgeBox(); if (fb) fb.value = Forge.input;
+        this.creatorView = 'edit'; Sfx.play('select'); return;
+      }
+      if (Input.mouseIn(336, y, 54, 28)) { Sfx.play('chest'); Share.copyChar(list[i]); return; }  // PAYLAŞ
+      if (Input.mouseIn(398, y, 52, 28)) { Creator.remove(i); Sfx.play('hurt'); return; }         // SİL
+    }
+    // KOD YAPIŞTIR (başkasının karakterini al)
+    if (Input.mouse.clicked && Input.mouseIn(300, 46, 150, 20)) { Share.importPrompt(); return; }
+  },
+
+  updateCreatorEdit() {
+    const d = Creator.draft;
+    if (!d) { this.creatorView = 'lib'; return; }
+
+    // adım sekmeleri
+    for (let i = 0; i < 4; i++) {
+      if (Input.mouse.clicked && Input.mouseIn(30 + i * 106, 26, 102, 16)) {
+        Creator.step = i; Sfx.play('click');
+        const fb = this.forgeBox();
+        Forge.input = i === 0 ? (d.name || '') : (i === 1 ? (d.look || '') : '');
+        if (fb) fb.value = Forge.input;
+        return;
+      }
+    }
+    // alt butonlar: KAYDET · KAYDET+OYNA
+    if (Input.mouse.clicked && Input.mouseIn(240, 244, 100, 20)) {
+      if (Creator.commit()) { this.showForgeBox(false); this.creatorView = 'lib'; Sfx.play('chest'); }
+      return;
+    }
+    if (Input.mouse.clicked && Input.mouseIn(348, 244, 102, 20)) {
+      if (Creator.commit()) {
+        this.showForgeBox(false);
+        if (Input.touchMode) goFullscreen();
+        Sfx.play('select');
+        Game.startCustomRun(d.id);
+      }
+      return;
+    }
+
+    if (Creator.step === 1) {                                    // ── GÖRÜNÜŞ ──
+      // fırça
+      if (Input.mouse.down) {
+        const c = this.pxAt(Input.mouse.x, Input.mouse.y);
+        if (c) {
+          const cur = d.px[c.y][c.x];
+          const want = PX_CHARS[Creator.palIdx];
+          if (!this.cPaint) this.cPaint = cur === want ? 'erase' : 'add';
+          const ch = this.cPaint === 'erase' ? '.' : want;
+          if (cur !== ch) { this.setPx(d, c.x, c.y, ch); Sfx.play('click'); }
+        }
+      } else this.cPaint = null;
+
+      if (!Input.mouse.clicked) return;
+      // palet (sağda 4x6)
+      for (let i = 0; i < PX_PAL.length; i++) {
+        const px = 300 + (i % 6) * 22, py = 70 + ((i / 6) | 0) * 22;
+        if (Input.mouseIn(px, py, 20, 20)) { Creator.palIdx = i; Sfx.play('click'); return; }
+      }
+      if (Input.mouseIn(300, 168, 150, 20)) {                    // YAZIDAN ÜRET
+        d.px = parseLook(d.look || '');
+        Sfx.play('select'); return;
+      }
+      if (Input.mouseIn(300, 192, 72, 20)) {                     // SIFIRLA
+        d.px = baseBody(Creator.palIdx); Sfx.play('hurt'); return;
+      }
+      if (Input.mouseIn(378, 192, 72, 20)) {                     // AYNALA (sol yarıyı sağa)
+        for (let y = 0; y < PX_H; y++) {
+          for (let x = 0; x < PX_W / 2; x++) this.setPx(d, PX_W - 1 - x, y, d.px[y][x]);
+        }
+        Sfx.play('select'); return;
+      }
+      return;
+    }
+
+    if (Creator.step === 2) {                                    // ── STAT + VURUŞ ──
+      if (!Input.mouse.clicked) return;
+      const keys = ['can', 'hiz', 'guc'];
+      for (let i = 0; i < 3; i++) {
+        const y = 62 + i * 26;
+        const used = d.pts.can + d.pts.hiz + d.pts.guc;
+        if (Input.mouseIn(300, y, 20, 18) && d.pts[keys[i]] > 0) {          // −
+          d.pts[keys[i]]--; Sfx.play('click'); return;
+        }
+        if (Input.mouseIn(324, y, 20, 18) && used < STAT_PTS && d.pts[keys[i]] < 5) {   // +
+          d.pts[keys[i]]++; Sfx.play('click'); return;
+        }
+      }
+      for (let i = 0; i < CREATOR_WEAPONS.length; i++) {         // oto vuruş
+        if (Input.mouseIn(30 + i * 72, 168, 68, 20)) { d.weapon = CREATOR_WEAPONS[i]; Sfx.play('click'); return; }
+      }
+      for (let i = 0; i < CREATOR_SKILLS.length; i++) {          // taban yetenek
+        if (Input.mouseIn(30 + i * 72, 214, 68, 20)) { d.skill = CREATOR_SKILLS[i]; Sfx.play('click'); return; }
+      }
+      return;
+    }
+
+    if (Creator.step === 3) {                                    // ── YETENEKLER ──
+      if (!Input.mouse.clicked) return;
+      if (Input.mouseIn(280, 44, 170, 20)) {                     // ATÖLYEDE YETENEK YARAT
+        this.showForgeBox(false);
+        Game.state = 'forge'; this.forgeView = 'lib'; Forge.fromCreator = true;
+        Sfx.play('select'); return;
+      }
+      const list = Forge.data.abilities;
+      for (let i = 0; i < Math.min(list.length, 6); i++) {
+        const y = 70 + i * 26;
+        if (!Input.mouseIn(30, y, 240, 24)) continue;
+        if (!d.abilities) d.abilities = [];
+        const at = d.abilities.indexOf(list[i].id);
+        if (at >= 0) d.abilities.splice(at, 1);
+        else if (d.abilities.length < 3) d.abilities.push(list[i].id);
+        Sfx.play('click'); return;
+      }
+    }
+  },
+
+  drawCreator(ctx) {
+    World.drawFloor(ctx, 424, 191, Game.uiT);
+    this.dim(ctx, 0.82);
+    this.backBtn(ctx);
+    if (this.creatorView === 'edit') { this.drawCreatorEdit(ctx); return; }
+
+    // ══ KÜTÜPHANE ══
+    drawText(ctx, 'KARAKTER ATÖLYESİ', 240, 8, COL.orange, { align: 'center', scale: 2, shadow: COL.outline });
+    drawText(ctx, 'KENDİ KARAKTERİNİ YOKTAN YARAT — HER PİKSELİ SENİN', 240, 30, COL.greyLight, { align: 'center' });
+
+    this.panel(ctx, 30, 46, 140, 20, COL.yellow);
+    drawText(ctx, '+ YENİ KARAKTER', 100, 52, COL.yellow, { align: 'center', shadow: COL.outline });
+    this.panel(ctx, 300, 46, 150, 20, COL.teal);
+    drawText(ctx, 'KOD YAPIŞTIR (AL)', 375, 52, COL.teal, { align: 'center' });
+
+    const list = Creator.data.chars;
+    if (!list.length) {
+      drawText(ctx, 'HENÜZ KARAKTERİN YOK.', 240, 120, COL.greyDark, { align: 'center' });
+      drawText(ctx, 'İSİM VER · PİKSEL PİKSEL ÇİZ · STAT DAĞIT · YETENEK TAK', 240, 138, COL.grey, { align: 'center' });
+      drawText(ctx, 'KODUNU ARKADAŞINA YOLLA, O DA SENİN KARAKTERİNLE OYNASIN', 240, 156, COL.navy, { align: 'center' });
+    }
+    for (let i = 0; i < Math.min(list.length, 5); i++) {
+      const c = list[i], y = 80 + i * 30;
+      const def = CHARACTERS[c.id];
+      this.panel(ctx, 30, y, 200, 28, COL.navy);
+      if (SPR.chars[c.id]) drawSpr(ctx, SPR.chars[c.id], ((Game.uiT * 5 + i) | 0) % 2, 46, y + 14, {});
+      drawText(ctx, (c.name || 'İSİMSİZ').toLocaleUpperCase('tr-TR'), 62, y + 4, def ? def.color : COL.white);
+      drawText(ctx, 'OYNA >', 224, y + 4, COL.green, { align: 'right' });
+      drawText(ctx, 'CAN ' + (def ? def.hp : '?') + ' · HIZ ' + (def ? def.speed : '?') +
+        ' · ' + (c.abilities || []).length + ' YETENEK', 62, y + 16, COL.grey);
+      this.panel(ctx, 238, y, 90, 28, COL.teal);
+      drawText(ctx, 'DÜZENLE', 283, y + 10, COL.teal, { align: 'center' });
+      this.panel(ctx, 336, y, 54, 28, COL.gold);
+      drawText(ctx, 'PAYLAŞ', 363, y + 10, COL.gold, { align: 'center' });
+      this.panel(ctx, 398, y, 52, 28, COL.red);
+      drawText(ctx, 'SİL', 424, y + 10, COL.red, { align: 'center' });
+    }
+    if (Share.msg && Game.uiT - Share.msgT < 4) {
+      drawText(ctx, Share.msg, 240, 240, COL.yellow, { align: 'center' });
+    } else {
+      drawText(ctx, 'SATIRA TIKLA: O KARAKTERLE OYNA · ESC: GERİ', 240, 240, COL.greyDark, { align: 'center' });
+    }
+  },
+
+  drawCreatorEdit(ctx) {
+    const d = Creator.draft;
+    if (!d) return;
+    drawText(ctx, (d.name || 'YENİ KARAKTER').toLocaleUpperCase('tr-TR'), 240, 6, COL.orange,
+      { align: 'center', scale: 2, shadow: COL.outline });
+
+    // adım sekmeleri
+    for (let i = 0; i < 4; i++) {
+      const on = Creator.step === i;
+      this.panel(ctx, 30 + i * 106, 26, 102, 16, on ? COL.yellow : COL.navy);
+      drawText(ctx, (i + 1) + '. ' + this.CSTEPS[i], 81 + i * 106, 30, on ? COL.yellow : COL.greyDark,
+        { align: 'center' });
+    }
+
+    if (Creator.step === 0) this.drawCStepName(ctx, d);
+    else if (Creator.step === 1) this.drawCStepLook(ctx, d);
+    else if (Creator.step === 2) this.drawCStepStats(ctx, d);
+    else this.drawCStepSkills(ctx, d);
+
+    this.panel(ctx, 240, 244, 100, 20, COL.teal);
+    drawText(ctx, 'KAYDET', 290, 250, COL.teal, { align: 'center', shadow: COL.outline });
+    this.panel(ctx, 348, 244, 102, 20, COL.green);
+    drawText(ctx, 'KAYDET+OYNA', 399, 250, COL.green, { align: 'center', shadow: COL.outline });
+  },
+
+  drawCStepName(ctx, d) {
+    drawText(ctx, 'KARAKTERİNİN ADI NE?', 240, 58, COL.greyLight, { align: 'center' });
+    this.panel(ctx, 140, 78, 200, 26, COL.navy);
+    const cur = ((Game.uiT * 3) | 0) % 2 ? '_' : '';
+    drawText(ctx, (d.name || '').toLocaleUpperCase('tr-TR') + cur, 240, 86, COL.white,
+      { align: 'center', scale: 2 });
+    if (!d.name) drawText(ctx, 'YAZMAYA BAŞLA (EN ÇOK 12 HARF)', 240, 112, COL.greyDark, { align: 'center' });
+    // canlı önizleme
+    if (d.px) {
+      const spr = buildCustomSprite(d.px);
+      ctx.save();
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(spr.frames[((Game.uiT * 5) | 0) % 2].n, 240 - 28, 132, 56, 68);
+      ctx.restore();
+    }
+    drawText(ctx, 'SONRAKİ ADIMDA GÖRÜNÜŞÜNÜ ÇİZECEKSİN', 240, 212, COL.navy, { align: 'center' });
+  },
+
+  drawCStepLook(ctx, d) {
+    // ── piksel ızgarası ──
+    const W = PX_W * this.cw, H = PX_H * this.cw;
+    ctx.fillStyle = '#0e1020';
+    ctx.fillRect(this.cl, this.ct, W, H);
+    const map = pxMap();
+    for (let y = 0; y < PX_H; y++) {
+      for (let x = 0; x < PX_W; x++) {
+        const ch = d.px[y] ? d.px[y][x] : '.';
+        const sx = this.cl + x * this.cw, sy = this.ct + y * this.cw;
+        if (ch !== '.' && map[ch]) {
+          ctx.fillStyle = map[ch];
+          ctx.fillRect(sx, sy, this.cw, this.cw);
+        }
+        ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+        ctx.strokeRect(sx + 0.5, sy + 0.5, this.cw - 1, this.cw - 1);
+      }
+    }
+    const hov = this.pxAt(Input.mouse.x, Input.mouse.y);
+    if (hov) {
+      ctx.strokeStyle = COL.yellow;
+      ctx.strokeRect(this.cl + hov.x * this.cw + 0.5, this.ct + hov.y * this.cw + 0.5, this.cw - 1, this.cw - 1);
+    }
+    drawText(ctx, 'SÜRÜKLE: BOYA · AYNI RENGE BAS: SİL', this.cl, 54, COL.greyDark);
+
+    // ── canlı önizleme (gerçek boy + büyütülmüş) ──
+    const spr = buildCustomSprite(d.px);
+    const fr = ((Game.uiT * 5) | 0) % 2;
+    ctx.save(); ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(spr.frames[fr].n, 176, 76, 42, 51);
+    ctx.restore();
+    drawText(ctx, 'OYUNDAKİ HALİ', 197, 132, COL.grey, { align: 'center' });
+    ctx.drawImage(spr.frames[fr].n, 190, 146);
+
+    // ── palet ──
+    for (let i = 0; i < PX_PAL.length; i++) {
+      const px = 300 + (i % 6) * 22, py = 70 + ((i / 6) | 0) * 22;
+      ctx.fillStyle = COL[PX_PAL[i]];
+      ctx.fillRect(px, py, 20, 20);
+      if (Creator.palIdx === i) {
+        ctx.strokeStyle = COL.yellow; ctx.lineWidth = 2;
+        ctx.strokeRect(px - 1, py - 1, 22, 22); ctx.lineWidth = 1;
+      } else {
+        ctx.strokeStyle = COL.outline;
+        ctx.strokeRect(px + 0.5, py + 0.5, 19, 19);
+      }
+    }
+    drawText(ctx, 'RENK SEÇ', 366, 58, COL.greyLight, { align: 'center' });
+
+    // ── yazıdan üret ──
+    this.panel(ctx, 300, 168, 150, 20, COL.orange);
+    drawText(ctx, 'YAZIDAN ÜRET', 375, 174, COL.orange, { align: 'center', shadow: COL.outline });
+    this.panel(ctx, 300, 192, 72, 20, COL.red);
+    drawText(ctx, 'SIFIRLA', 336, 198, COL.red, { align: 'center' });
+    this.panel(ctx, 378, 192, 72, 20, COL.teal);
+    drawText(ctx, 'AYNALA', 414, 198, COL.teal, { align: 'center' });
+
+    // tarif kutusu (yazıp "YAZIDAN ÜRET"e basınca taslak çizilir, sonra elle bozarsın)
+    this.panel(ctx, 24, 222, 426, 20, COL.navy);
+    const cur = ((Game.uiT * 3) | 0) % 2 ? '_' : '';
+    if (d.look) {
+      drawText(ctx, (d.look + cur).slice(0, 70), 30, 228, COL.white);
+    } else {
+      drawText(ctx, 'TARİF ET: "kırmızı saçlı, gözlüklü, mor pelerinli robot"' + cur, 30, 228, COL.greyDark);
+    }
+    drawText(ctx, 'ÇİZİM SENİN', 30, 250, COL.navy);
+  },
+
+  drawCStepStats(ctx, d) {
+    const used = d.pts.can + d.pts.hiz + d.pts.guc;
+    drawText(ctx, 'PUAN DAĞIT: ' + (STAT_PTS - used) + ' / ' + STAT_PTS + ' KALDI', 240, 48, COL.yellow,
+      { align: 'center' });
+    const rows = [
+      ['can', 'CAN', 80 + d.pts.can * 15, COL.red],
+      ['hiz', 'HIZ', (0.85 + d.pts.hiz * 0.075).toFixed(2), COL.cyan],
+      ['guc', 'GÜÇ', '%' + Math.round((0.8 + d.pts.guc * 0.1) * 100), COL.orange]
+    ];
+    for (let i = 0; i < 3; i++) {
+      const [k, label, val, col] = rows[i];
+      const y = 62 + i * 26;
+      this.panel(ctx, 30, y, 260, 18, col);
+      drawText(ctx, label, 38, y + 5, col);
+      for (let b = 0; b < 5; b++) {                       // puan çubukları
+        ctx.fillStyle = b < d.pts[k] ? col : COL.navyDark;
+        ctx.fillRect(76 + b * 14, y + 5, 11, 8);
+      }
+      drawText(ctx, String(val), 282, y + 5, COL.white, { align: 'right' });
+      this.panel(ctx, 300, y, 20, 18, COL.red);
+      drawText(ctx, '-', 310, y + 5, COL.red, { align: 'center' });
+      this.panel(ctx, 324, y, 20, 18, COL.green);
+      drawText(ctx, '+', 334, y + 5, COL.green, { align: 'center' });
+    }
+    drawText(ctx, 'OTO VURUŞ', 30, 154, COL.greyLight);
+    for (let i = 0; i < CREATOR_WEAPONS.length; i++) {
+      const w = CREATOR_WEAPONS[i], on = d.weapon === w;
+      this.panel(ctx, 30 + i * 72, 168, 68, 20, on ? COL.yellow : COL.navy);
+      drawText(ctx, (WEAPONS[w].name || w).slice(0, 9), 64 + i * 72, 174, on ? COL.yellow : COL.greyDark,
+        { align: 'center' });
+    }
+    drawText(ctx, 'TABAN YETENEK (SPACE) — ATÖLYE YETENEĞİ TAKARSAN O EZER', 30, 200, COL.greyLight);
+    for (let i = 0; i < CREATOR_SKILLS.length; i++) {
+      const s = CREATOR_SKILLS[i], on = d.skill === s;
+      this.panel(ctx, 30 + i * 72, 214, 68, 20, on ? COL.yellow : COL.navy);
+      drawText(ctx, (SKILLS[s].name || s).slice(0, 9), 64 + i * 72, 220, on ? COL.yellow : COL.greyDark,
+        { align: 'center' });
+    }
+  },
+
+  drawCStepSkills(ctx, d) {
+    if (!d.abilities) d.abilities = [];
+    drawText(ctx, 'YETENEKLERİNİ TAK (EN ÇOK 3)', 150, 48, COL.greyLight, { align: 'center' });
+    this.panel(ctx, 280, 44, 170, 20, COL.orange);
+    drawText(ctx, 'ATÖLYEDE YENİ YARAT >', 365, 50, COL.orange, { align: 'center', shadow: COL.outline });
+
+    const list = Forge.data.abilities;
+    if (!list.length) {
+      drawText(ctx, 'SKİLL ATÖLYESİNDE HENÜZ YETENEK YARATMADIN.', 240, 110, COL.greyDark, { align: 'center' });
+      drawText(ctx, 'SAĞ ÜSTTEKİ BUTONA BAS, CÜMLEYLE YA DA ÇİZEREK YARAT.', 240, 128, COL.navy,
+        { align: 'center' });
+      return;
+    }
+    for (let i = 0; i < Math.min(list.length, 6); i++) {
+      const a = list[i], y = 70 + i * 26;
+      const slot = d.abilities.indexOf(a.id);
+      const tcol = COL[(THEMES[a.theme] || THEMES.sade).col] || COL.white;
+      this.panel(ctx, 30, y, 240, 24, slot >= 0 ? COL.gold : COL.navy);
+      ctx.fillStyle = tcol; ctx.fillRect(36, y + 9, 6, 6);
+      drawText(ctx, a.name, 48, y + 3, slot >= 0 ? COL.gold : COL.white);
+      drawText(ctx, (TRIGGER_LABEL[a.trigger.kind] || '') + ' · ' + specChain(a).slice(0, 26), 48, y + 13, COL.grey);
+      if (slot >= 0) drawText(ctx, 'SLOT ' + (slot + 1), 264, y + 8, COL.gold, { align: 'right' });
+    }
+    drawText(ctx, 'SATIRA TIKLA: TAK / ÇIKAR', 150, 240, COL.greyDark, { align: 'center' });
   },
 
   // ── SKİLL ATÖLYESİ v2 (kütüphane + editör) ──
@@ -136,7 +531,14 @@ const UI = {
       if (this.forgeView === 'shape') { this.forgeView = 'edit'; Sfx.play('click'); return; }
       if (this.forgeView === 'edit') { this.forgeView = 'lib'; Sfx.play('click'); return; }
       this.showForgeBox(false);
-      Game.state = 'title'; Game.menuIdx = 0; Sfx.play('click'); return;
+      Sfx.play('click');
+      // karakter atölyesinden geldiysek oraya dön (yetenek takma adımına)
+      if (Forge.fromCreator) {
+        Forge.fromCreator = false;
+        Game.state = 'creator'; this.creatorView = 'edit'; Creator.step = 3;
+        return;
+      }
+      Game.state = 'title'; Game.menuIdx = 0; return;
     }
 
     // ══ İZGARA ŞEKİL EDİTÖRÜ ══
@@ -200,20 +602,25 @@ const UI = {
       Game.startForgeTest('ahmet');
       return;
     }
-    // liste satırları: TAK/ÇIKAR · DÜZENLE · SİL
+    // KOD YAPIŞTIR (başkasının yeteneğini al)
+    if (Input.mouse.clicked && Input.mouseIn(175, 46, 130, 20)) { Share.importPrompt(); return; }
+    // liste satırları: TAK/ÇIKAR · DÜZENLE · PAYLAŞ · SİL
     for (let i = 0; i < Math.min(list.length, 6); i++) {
       const y = 76 + i * 26;
       if (!Input.mouse.clicked) break;
-      if (Input.mouseIn(30, y, 250, 24)) {           // satır → tak/çıkar
+      if (Input.mouseIn(30, y, 224, 24)) {           // satır → tak/çıkar
         Forge.toggleEquip(list[i].id); Sfx.play('click'); return;
       }
-      if (Input.mouseIn(288, y, 74, 24)) {           // DÜZENLE
+      if (Input.mouseIn(262, y, 68, 24)) {           // DÜZENLE
         Forge.editIdx = i; Forge.draft = list[i];
         Forge.input = list[i].text || '';
         const fb = this.forgeBox(); if (fb) fb.value = Forge.input;
         this.forgeView = 'edit'; Sfx.play('select'); return;
       }
-      if (Input.mouseIn(370, y, 80, 24)) {           // SİL
+      if (Input.mouseIn(338, y, 58, 24)) {           // PAYLAŞ
+        Share.copySpec(list[i]); Sfx.play('chest'); return;
+      }
+      if (Input.mouseIn(404, y, 46, 24)) {           // SİL
         Forge.remove(i); Sfx.play('hurt'); return;
       }
     }
@@ -366,6 +773,8 @@ const UI = {
 
     this.panel(ctx, 30, 46, 130, 20, COL.yellow);
     drawText(ctx, '+ YENİ YETENEK', 95, 52, COL.yellow, { align: 'center', shadow: COL.outline });
+    this.panel(ctx, 175, 46, 130, 20, COL.teal);
+    drawText(ctx, 'KOD YAPIŞTIR (AL)', 240, 52, COL.teal, { align: 'center' });
     this.panel(ctx, 320, 46, 130, 20, eqN ? COL.green : COL.navy);
     drawText(ctx, 'OYNA', 385, 52, eqN ? COL.green : COL.navyDark, { align: 'center', shadow: COL.outline });
 
@@ -381,19 +790,25 @@ const UI = {
       const y = 76 + i * 26;
       const slot = Forge.data.equipped.indexOf(a.id);
       const tcol = COL[(THEMES[a.theme] || THEMES.sade).col] || COL.white;
-      this.panel(ctx, 30, y, 250, 24, slot >= 0 ? COL.gold : COL.navy);
+      this.panel(ctx, 30, y, 224, 24, slot >= 0 ? COL.gold : COL.navy);
       // tema renk noktası
       ctx.fillStyle = tcol; ctx.fillRect(36, y + 8, 6, 6);
       drawText(ctx, a.name, 48, y + 3, slot >= 0 ? COL.gold : COL.white);
-      drawText(ctx, (TRIGGER_LABEL[a.trigger.kind] || '') + ' · ' + specChain(a).slice(0, 30),
+      drawText(ctx, (TRIGGER_LABEL[a.trigger.kind] || '') + ' · ' + specChain(a).slice(0, 26),
         48, y + 13, COL.grey);
-      if (slot >= 0) drawText(ctx, 'SLOT ' + (slot + 1), 274, y + 8, COL.gold, { align: 'right' });
-      this.panel(ctx, 288, y, 74, 24, COL.teal);
-      drawText(ctx, 'DÜZENLE', 325, y + 8, COL.teal, { align: 'center' });
-      this.panel(ctx, 370, y, 80, 24, COL.red);
-      drawText(ctx, 'SİL', 410, y + 8, COL.red, { align: 'center' });
+      if (slot >= 0) drawText(ctx, 'SLOT ' + (slot + 1), 248, y + 8, COL.gold, { align: 'right' });
+      this.panel(ctx, 262, y, 68, 24, COL.teal);
+      drawText(ctx, 'DÜZENLE', 296, y + 8, COL.teal, { align: 'center' });
+      this.panel(ctx, 338, y, 58, 24, COL.gold);
+      drawText(ctx, 'PAYLAŞ', 367, y + 8, COL.gold, { align: 'center' });
+      this.panel(ctx, 404, y, 46, 24, COL.red);
+      drawText(ctx, 'SİL', 427, y + 8, COL.red, { align: 'center' });
     }
-    drawText(ctx, 'SATIRA TIKLA: SLOTA TAK / ÇIKAR · ESC: GERİ', 240, 250, COL.greyDark, { align: 'center' });
+    if (Share.msg && Game.uiT - Share.msgT < 4) {
+      drawText(ctx, Share.msg, 240, 250, COL.yellow, { align: 'center' });
+    } else {
+      drawText(ctx, 'SATIRA TIKLA: SLOTA TAK / ÇIKAR · ESC: GERİ', 240, 250, COL.greyDark, { align: 'center' });
+    }
   },
 
   drawForgeEditor(ctx) {
@@ -563,7 +978,7 @@ const UI = {
     ctx.drawImage(SPR.car.n, Math.round(carX), 108);
 
     // ekibin durduğu konveyör bandı
-    const beltY = 154;
+    const beltY = 142;
     ctx.fillStyle = COL.navyDark; ctx.fillRect(140, beltY, 200, 8);
     ctx.fillStyle = COL.outline; ctx.fillRect(140, beltY + 1, 200, 6);
     ctx.fillStyle = COL.navy;
@@ -576,14 +991,15 @@ const UI = {
     for (let i = 0; i < CHAR_ORDER.length; i++) {
       const id = CHAR_ORDER[i];
       const x = 240 + (i - 2.5) * 26;
-      drawSpr(ctx, SPR.chars[id], ((this.titleT * 6 + i) | 0) % 2, x, 152 + Math.sin(this.titleT * 3 + i) * 1.5, {});
+      drawSpr(ctx, SPR.chars[id], ((this.titleT * 6 + i) | 0) % 2, x, 140 + Math.sin(this.titleT * 3 + i) * 1.5, {});
     }
 
     // menü
     const achN = Achievements.countDone();
     const labels = ['BAŞLA',
       'GÜNÜN VARDİYASI',
-      'SKİLL ATÖLYESİ *YENİ*',
+      'KARAKTER ATÖLYESİ *YENİ*',
+      'SKİLL ATÖLYESİ',
       'DÜKKAN',
       'ALBÜM (' + achN + '/' + ACH_DEFS.length + ')',
       'SKOR TABLOSU',
@@ -591,7 +1007,7 @@ const UI = {
       'SES: ' + (Sfx.muted ? 'KAPALI' : 'AÇIK')];
     for (let i = 0; i < labels.length; i++) {
       const sel = Game.menuIdx === i;
-      const y = 156 + i * 12;
+      const y = 152 + i * 11;
       if (sel) {
         drawText(ctx, '>', 240 - textW(labels[i]) / 2 - 14, y, COL.yellow, { shadow: COL.outline });
       }
@@ -979,6 +1395,10 @@ const UI = {
       this.pickTech(cid, this.tipSlot.listName, this.tipSlot.idx);
       return;
     }
+    // kendi karakterlerin → atölye kütüphanesi
+    if (Input.mouse.clicked && Input.mouseIn(30, 244, 170, 20)) {
+      Sfx.play('select'); Game.state = 'creator'; this.creatorView = 'lib'; return;
+    }
     for (let i = 0; i < 6; i++) {
       const r = this.cardRect(i);
       if (Input.mouseIn(r.x, r.y, r.w, r.h)) {
@@ -1175,6 +1595,12 @@ const UI = {
         }
       }
     }
+
+    // kendi karakterlerine geçiş
+    const cn = Creator.data.chars.length;
+    this.panel(ctx, 30, 244, 170, 20, cn ? COL.orange : COL.navy);
+    drawText(ctx, cn ? 'KENDİ KARAKTERLERİN (' + cn + ') >' : 'KENDİ KARAKTERİNİ YARAT >',
+      115, 250, cn ? COL.orange : COL.greyDark, { align: 'center' });
   },
 
   // ── HUD ──

@@ -12,6 +12,7 @@
   Achievements.load();
   Story.load();
   Forge.load();
+  Creator.load();     // özel karakterleri CHARACTERS/TECHS/SPR'ye kaydeder
 
   // PWA: service worker (yalnızca http/https — yerel dosyada çalışmaz)
   if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
@@ -59,6 +60,27 @@
         for (const tid of TECHS[cid][listName]) Meta.grantUnlock('t_' + tid);
       }
     }
+  }
+  // ?mkchar=<isim>&look=<cümle>[&forge=<yetenek cümlesi>] → 'ctest' kimlikli örnek
+  // karakteri kaydeder. Sonra ?char=ctest ile normal koşu/sim yoluna girebilir.
+  if (params.get('mkchar')) {
+    const cc = newCharDraft();
+    cc.id = 'ctest';
+    cc.name = params.get('mkchar');
+    cc.look = params.get('look') || '';
+    if (cc.look) cc.px = parseLook(cc.look);
+    if (params.get('cw')) cc.weapon = params.get('cw');
+    if (params.get('forge')) {
+      const sp = parseAbility(params.get('forge'));
+      if (!sp.unknown) {
+        Forge.data.abilities.push(sp);
+        cc.abilities = [sp.id];
+        Forge.data.equipped[0] = sp.id;
+      }
+    }
+    Creator.data.chars.push(cc);
+    Creator.register(cc);
+    if (!params.get('char')) { Game.state = 'creator'; UI.creatorView = 'lib'; }
   }
   if (params.get('char')) {
     const c = params.get('char');
@@ -222,6 +244,23 @@
   }
   if (params.get('screen') === 'album') Game.state = 'album';
   if (params.get('screen') === 'daily') Game.state = 'daily';
+  // karakter atölyesi testi:
+  //   ?screen=creator                       → kütüphane
+  //   ?screen=creator&cview=edit&cstep=1&look=<cümle>&cname=<isim>
+  if (params.get('screen') === 'creator') {
+    Game.state = 'creator';
+    UI.creatorView = params.get('cview') === 'edit' ? 'edit' : 'lib';
+    if (UI.creatorView === 'edit') {
+      Creator.draft = newCharDraft();
+      Creator.editIdx = -1;
+      Creator.step = clamp(parseInt(params.get('cstep') || '0', 10), 0, 3);
+      if (params.get('cname')) Creator.draft.name = params.get('cname');
+      if (params.get('look')) {
+        Creator.draft.look = params.get('look');
+        Creator.draft.px = parseLook(Creator.draft.look);
+      }
+    }
+  }
   if (params.get('screen') === 'forge') {
     Game.state = 'forge';
     if (params.get('text')) {
